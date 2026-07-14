@@ -1,0 +1,76 @@
+/* -----------------------------------------------------------------------
+   세금지킴이 - 디자인 토큰
+   컨셉: "지킴이(guardian)" - 신뢰감 있는 짙은 청록(ink) + 보증서 느낌의
+   골드 강조색. 숫자(세금액)는 모노스페이스로 감사/정밀함을 표현.
+----------------------------------------------------------------------- */
+
+@import url("https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@500;700&family=Noto+Sans+KR:wght@400;500;700&family=IBM+Plex+Mono:wght@500;600&display=swap");
+
+:root {
+  /* Color */
+  --color-bg: #f2f5f4;
+  --color-surface: #ffffff;
+  --color-ink: #16302e;
+  --color-ink-soft: #4d6462;
+  --color-gold: #b8923f;
+  --color-guard-green: #3e7a5a;
+  --color-alert: #b54b3c;
+  --color-border: #dbe3e0;
+
+  /* Type */
+  --font-display: "Noto Serif KR", serif;
+  --font-body: "Noto Sans KR", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+
+  /* Layout */
+  --radius: 10px;
+  --shadow-card: 0 1px 2px rgba(22, 48, 46, 0.06), 0 4px 16px rgba(22, 48, 46, 0.06);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+button {
+  font-family: inherit;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-guard-green);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
