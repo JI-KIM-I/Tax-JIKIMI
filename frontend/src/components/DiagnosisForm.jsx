@@ -88,7 +88,7 @@ export default function DiagnosisForm({ onSubmit, loading }) {
           onChange={handleChange}
         />
         <NumberField
-          label="연금 수령 예정 나이 (연금을 받기 시작할 나이)"
+          label="연금 수령 예정 나이"
           name="retirement_age"
           min={form.age}
           max="100"
@@ -160,7 +160,7 @@ export default function DiagnosisForm({ onSubmit, loading }) {
           onChange={handleChange}
         />
         <NumberField
-          label="예상 연금 수령 총액 (앞으로 받을 연금 총액)"
+          label="예상 연금 수령 총액"
           hint="0으로 두면 위 연금저축 + IRP 잔액을 합쳐서 계산해요"
           name="expected_pension_amount"
           min="0"
@@ -191,7 +191,7 @@ export default function DiagnosisForm({ onSubmit, loading }) {
       <fieldset>
         <legend>4. 절세계좌 현황</legend>
         <NumberField
-          label="ISA 올해 납입액 (올해 ISA에 넣은 돈)"
+          label="ISA 올해 납입액"
           name="isa_paid_this_year"
           min="0"
           value={form.isa_paid_this_year}
@@ -205,7 +205,7 @@ export default function DiagnosisForm({ onSubmit, loading }) {
           onChange={handleChange}
         />
         <NumberField
-          label="연금저축 올해 납입액 (올해 연금저축에 넣은 돈)"
+          label="연금저축 올해 납입액"
           name="pension_savings_paid_this_year"
           min="0"
           step={500000}
@@ -213,7 +213,7 @@ export default function DiagnosisForm({ onSubmit, loading }) {
           onChange={handleChange}
         />
         <NumberField
-          label="IRP 올해 납입액 (올해 IRP에 넣은 돈)"
+          label="IRP 올해 납입액"
           name="irp_paid_this_year"
           min="0"
           step={500000}
