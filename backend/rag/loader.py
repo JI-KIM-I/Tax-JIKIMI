@@ -1,175 +1,110 @@
-"""RAG 문서 로더와 청킹 로직."""
 from __future__ import annotations
 
-import hashlib
-import os
-import re
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+import hashlib
+import re
 
 
-@dataclass(frozen=True)
-class DocumentChunk:
-    id: str
+@dataclass
+class RAGDocument:
+    doc_id: str
     title: str
     content: str
+    text: str
     category: str
     source: str
     date: str
-    path: str
-    chunk_index: int
-
-    @property
-    def combined_text(self) -> str:
-        return (
-            f"제목: {self.title}\n"
-            f"분류: {self.category}\n"
-            f"출처: {self.source}\n"
-            f"기준일: {self.date}\n\n"
-            f"{self.content}"
-        )
-
-    def metadata(self) -> dict:
-        data = asdict(self)
-        data.pop("content", None)
-        return data
 
 
-def normalize_text(text: str) -> str:
-    text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
+class DocumentLoader:
+    """rag/sources/*.txt 문서를 읽어서 검색 가능한 문서 조각으로 변환한다."""
 
+    def __init__(self, sources_dir: str | Path):
+        self.sources_dir = Path(sources_dir)
 
-def parse_metadata_and_body(raw_text: str, fallback_title: str, path: str) -> tuple[dict, str]:
-    """txt 상단의 선택 메타데이터를 읽습니다.
+    def _guess_category(self, filename: str, text: str) -> str:
+        joined = f"{filename} {text}"
+        if "금융소득" in joined or "종합과세" in joined:
+            return "금융소득"
+        if "연금" in joined:
+            return "연금"
+        if "ISA" in joined or "IRP" in joined or "연금저축" in joined or "절세한도" in joined:
+            return "절세계좌"
+        if "증여" in joined or "상속" in joined:
+            return "상속증여"
+        return "세금"
 
-    지원 형식:
-        title: 금융소득종합과세
-        category: 금융소득
-        source: 국세청
-        date: 2026-01-01
-        ---
-        본문...
-    """
-    text = normalize_text(raw_text)
-    metadata = {
-        "title": fallback_title,
-        "category": "세금",
-        "source": fallback_title,
-        "date": "",
-        "path": path,
-    }
+    def _normalize_text(self, text: str) -> str:
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+        text = re.sub(r"[ \t]+", " ", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
 
-    if "---" in text[:500]:
-        head, body = text.split("---", 1)
-        for line in head.splitlines():
-            if ":" not in line:
-                continue
-            key, value = line.split(":", 1)
-            key = key.strip().lower()
-            value = value.strip()
-            if key in metadata and value:
-                metadata[key] = value
-        return metadata, normalize_text(body)
-
-    # 메타데이터가 없으면 첫 줄을 제목 후보로 씁니다.
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    if lines:
-        metadata["title"] = lines[0][:80]
-    return metadata, text
-
-
-def split_into_chunks(text: str, max_chars: int = 900, min_chars: int = 120) -> list[str]:
-    """문서를 문단 단위로 쪼갠 뒤 너무 길면 문장 단위로 추가 분할합니다."""
-    text = normalize_text(text)
-    if not text:
-        return []
-
-    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
-
-    chunks: list[str] = []
-    buffer = ""
-
-    def flush():
-        nonlocal buffer
-        if buffer.strip():
-            chunks.append(buffer.strip())
+    def _chunk_text(self, text: str, min_chars: int = 80, max_chars: int = 900) -> list[str]:
+        paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+        chunks: list[str] = []
         buffer = ""
 
-    for para in paragraphs:
-        if len(para) > max_chars:
-            flush()
-            sentences = re.split(r"(?<=[.!?。！？다요음임함됨])\s+", para)
-            tmp = ""
-            for sent in sentences:
-                sent = sent.strip()
-                if not sent:
-                    continue
-                if len(tmp) + len(sent) + 1 <= max_chars:
-                    tmp = f"{tmp} {sent}".strip()
-                else:
-                    if tmp:
-                        chunks.append(tmp)
-                    tmp = sent
-            if tmp:
-                chunks.append(tmp)
-            continue
+        for para in paragraphs:
+            candidate = f"{buffer}\n\n{para}".strip() if buffer else para
 
-        if len(buffer) + len(para) + 2 <= max_chars:
-            buffer = f"{buffer}\n\n{para}".strip()
-        else:
-            flush()
-            buffer = para
+            if len(candidate) < min_chars:
+                buffer = candidate
+            elif len(candidate) <= max_chars:
+                chunks.append(candidate)
+                buffer = ""
+            else:
+                if buffer:
+                    chunks.append(buffer)
+                    buffer = ""
+                chunks.append(para[:max_chars])
 
-    flush()
+        if buffer:
+            chunks.append(buffer)
 
-    # 너무 짧은 chunk는 다음 chunk와 합칩니다.
-    merged: list[str] = []
-    for chunk in chunks:
-        if merged and len(chunk) < min_chars:
-            merged[-1] = f"{merged[-1]}\n\n{chunk}".strip()
-        else:
-            merged.append(chunk)
+        return chunks or [text]
 
-    return [c for c in merged if len(c.strip()) >= 20]
+    def load_documents(self) -> list[RAGDocument]:
+        if not self.sources_dir.exists():
+            raise FileNotFoundError(f"RAG sources 폴더가 없습니다: {self.sources_dir}")
 
+        txt_files = sorted(self.sources_dir.glob("*.txt"))
+        if not txt_files:
+            raise FileNotFoundError(f"{self.sources_dir} 안에 .txt 파일이 없습니다.")
 
-def load_documents(sources_dir: str | os.PathLike) -> list[DocumentChunk]:
-    root = Path(sources_dir)
-    if not root.exists():
-        raise FileNotFoundError(f"RAG sources 폴더가 없습니다: {root}")
+        documents: list[RAGDocument] = []
+        seen_contents: set[str] = set()
 
-    files = sorted(root.glob("*.txt"))
-    if not files:
-        raise FileNotFoundError(f"{root} 안에 .txt 문서가 없습니다.")
-
-    seen_hashes: set[str] = set()
-    chunks: list[DocumentChunk] = []
-
-    for file in files:
-        raw = file.read_text(encoding="utf-8")
-        meta, body = parse_metadata_and_body(raw, file.stem, str(file))
-        for idx, content in enumerate(split_into_chunks(body)):
-            content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
-            if content_hash in seen_hashes:
+        for path in txt_files:
+            text = self._normalize_text(path.read_text(encoding="utf-8"))
+            if not text:
                 continue
-            seen_hashes.add(content_hash)
 
-            chunk_id = f"{file.stem}::{idx}::{content_hash[:10]}"
-            chunks.append(
-                DocumentChunk(
-                    id=chunk_id,
-                    title=meta["title"],
-                    category=meta["category"],
-                    source=meta["source"],
-                    date=meta["date"],
-                    path=meta["path"],
-                    content=content,
-                    chunk_index=idx,
+            title = path.stem.replace("_", " ").replace("-", " ").strip()
+            category = self._guess_category(path.name, text)
+            source = "국세청 및 관련 안내자료 기반 정리"
+            date = "2026"
+
+            for idx, chunk in enumerate(self._chunk_text(text)):
+                content = self._normalize_text(chunk)
+                if not content or content in seen_contents:
+                    continue
+
+                seen_contents.add(content)
+                digest = hashlib.md5(content.encode("utf-8")).hexdigest()[:10]
+                doc_id = f"{path.stem}::{idx}::{digest}"
+
+                documents.append(
+                    RAGDocument(
+                        doc_id=doc_id,
+                        title=title,
+                        content=content,
+                        text=content,
+                        category=category,
+                        source=source,
+                        date=date,
+                    )
                 )
-            )
 
-    return chunks
+        return documents

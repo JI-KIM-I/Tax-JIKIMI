@@ -6,21 +6,12 @@ import os
 import re
 from typing import Iterable, List
 
-
-DEFAULT_EMBEDDING_PROVIDER = os.getenv("RAG_EMBEDDING_PROVIDER", "local")
-DEFAULT_OPENAI_EMBEDDING_MODEL = os.getenv(
-    "RAG_OPENAI_EMBEDDING_MODEL",
-    "text-embedding-3-small",
-)
+DEFAULT_EMBEDDING_PROVIDER = os.getenv("RAG_EMBEDDING_PROVIDER", "local").lower()
+DEFAULT_OPENAI_EMBEDDING_MODEL = os.getenv("RAG_OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
 
 
 class LocalHashEmbeddingFunction:
-    """
-    API 키 없이도 동작하는 로컬 해시 기반 임베딩 함수.
-
-    ChromaDB 버전과 우리 retriever 코드 양쪽에서 모두 쓸 수 있도록
-    __call__, embed_documents, embed_query를 전부 제공한다.
-    """
+    """OPENAI_API_KEY 없이도 ChromaDB 벡터 검색 흐름을 검증할 수 있는 로컬 임베딩."""
 
     def __init__(self, dim: int = 384):
         self.dim = dim
@@ -29,8 +20,7 @@ class LocalHashEmbeddingFunction:
         return f"local-hash-embedding-{self.dim}"
 
     def _tokenize(self, text: str) -> list[str]:
-        text = str(text).lower()
-        return re.findall(r"[가-힣a-zA-Z0-9]+", text)
+        return re.findall(r"[가-힣a-zA-Z0-9]+", str(text).lower())
 
     def _embed_one(self, text: str) -> list[float]:
         vector = [0.0] * self.dim
@@ -48,7 +38,6 @@ class LocalHashEmbeddingFunction:
         norm = math.sqrt(sum(v * v for v in vector))
         if norm == 0:
             return vector
-
         return [v / norm for v in vector]
 
     def __call__(self, input: Iterable[str]) -> List[List[float]]:
@@ -62,25 +51,11 @@ class LocalHashEmbeddingFunction:
 
 
 def get_embedding_function():
-    """
-    ChromaDB에 전달할 embedding function 반환.
-
-    기본값은 local이라 OpenAI API 키 없이도 실행된다.
-    OpenAI 임베딩을 쓰려면:
-      RAG_EMBEDDING_PROVIDER=openai
-      OPENAI_API_KEY=...
-    """
-    provider = DEFAULT_EMBEDDING_PROVIDER.lower()
-
-    if provider == "openai":
+    if DEFAULT_EMBEDDING_PROVIDER == "openai":
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise RuntimeError(
-                "RAG_EMBEDDING_PROVIDER=openai 이지만 OPENAI_API_KEY가 없습니다."
-            )
-
+            raise RuntimeError("RAG_EMBEDDING_PROVIDER=openai 이지만 OPENAI_API_KEY가 없습니다.")
         from chromadb.utils import embedding_functions
-
         return embedding_functions.OpenAIEmbeddingFunction(
             api_key=api_key,
             model_name=DEFAULT_OPENAI_EMBEDDING_MODEL,
