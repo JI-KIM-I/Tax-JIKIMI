@@ -1,0 +1,14 @@
+[project]
+name = "backend"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "chromadb>=1.5.9",
+    "fastapi>=0.139.2",
+    "openai>=2.45.0",
+    "pillow>=12.3.0",
+    "pydantic>=2.13.4",
+    "python-dotenv>=1.2.2",
+    "reportlab>=5.0.0",
+    "uvicorn[standard]>=0.51.0",
+]
