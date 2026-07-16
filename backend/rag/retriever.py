@@ -1,139 +1,140 @@
-"""RAG 검색기.
-
-1순위: ChromaDB 벡터 검색
-2순위: 벡터DB가 없거나 라이브러리/API 키 문제가 있으면 txt 직접 키워드 검색 fallback
-
-이렇게 해두면 팀원 PC에서 아직 인덱스를 안 만들었거나 OPENAI_API_KEY가 없어도
-/api/search, /api/chat이 완전히 죽지 않고 데모 가능한 답변을 반환합니다.
-"""
 from __future__ import annotations
 
-import math
 import os
-import re
 import time
-from pathlib import Path
+from typing import Any
 
-from .embedding import get_embedding_function
-from .loader import DocumentChunk, load_documents
+import chromadb
 
-BASE_DIR = Path(__file__).resolve().parent
-SOURCES_DIR = BASE_DIR / "sources"
-DB_DIR = BASE_DIR / "chroma_db"
+from rag.embedding import get_embedding_function
+from rag.loader import DocumentLoader
+
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SOURCES_DIR = os.path.join(BASE_DIR, "sources")
+CHROMA_DB_DIR = os.path.join(BASE_DIR, "chroma_db")
 COLLECTION_NAME = "tax_knowledge"
 
 
-def _tokens(text: str) -> list[str]:
-    text = (text or "").lower()
-    return re.findall(r"[가-힣]{2,}|[a-zA-Z0-9]{2,}", text)
+class RAGRetriever:
+    def __init__(self):
+        self.embedding_function = get_embedding_function()
+        self.loader = DocumentLoader(SOURCES_DIR)
 
+    def _fallback_search(self, query: str, top_k: int = 10, warning: str | None = None) -> dict:
+        started = time.time()
+        docs = self.loader.load_documents()
 
-def _keyword_score(query: str, text: str) -> float:
-    q_tokens = _tokens(query)
-    if not q_tokens:
-        return 0.0
-    text_l = (text or "").lower()
-    score = 0.0
-    for tok in q_tokens:
-        count = text_l.count(tok)
-        if count:
-            score += 1.0 + math.log(count + 1)
-    return score / len(q_tokens)
+        query_terms = set(str(query).lower().split())
+        scored = []
 
+        for doc in docs:
+            text = f"{doc.title} {doc.category} {doc.content}".lower()
+            score = 0
+            for term in query_terms:
+                if term and term in text:
+                    score += 1
 
-def fallback_keyword_search(query: str, top_k: int = 10) -> list[dict]:
-    chunks = load_documents(SOURCES_DIR)
-    scored: list[tuple[float, DocumentChunk]] = []
-    for chunk in chunks:
-        score = _keyword_score(query, chunk.combined_text)
-        if score > 0:
-            scored.append((score, chunk))
+            # 한국어 문장이 공백 기준으로 잘 안 잘릴 수 있어서 핵심 키워드 보정
+            bonus_keywords = [
+                "연금", "분할", "일시금", "세율", "금융소득",
+                "종합과세", "ISA", "IRP", "연금저축"
+            ]
+            for kw in bonus_keywords:
+                if kw in query and kw in text:
+                    score += 2
 
-    # 질의 토큰이 하나도 안 걸릴 때는 앞 문서라도 보여줘서 챗봇이 근거를 갖게 합니다.
-    if not scored:
-        scored = [(0.0, c) for c in chunks[:top_k]]
+            if score > 0:
+                scored.append((score, doc))
 
-    scored.sort(key=lambda x: x[0], reverse=True)
+        scored.sort(key=lambda x: x[0], reverse=True)
+        results = []
 
-    results = []
-    for score, chunk in scored[:top_k]:
-        results.append(
-            {
-                "id": chunk.id,
-                "title": chunk.title,
-                "content": chunk.content,
-                "text": chunk.content,
-                "category": chunk.category,
-                "source": chunk.source,
-                "date": chunk.date,
-                "score": round(float(score), 4),
+        for score, doc in scored[:top_k]:
+            results.append({
+                "id": doc.doc_id,
+                "title": doc.title,
+                "content": doc.content,
+                "text": doc.content,
+                "category": doc.category,
+                "source": doc.source,
+                "date": doc.date,
+                "score": score,
                 "distance": None,
                 "retrieval_method": "keyword_fallback",
-            }
-        )
-    return results
+            })
 
-
-def chroma_search(query: str, top_k: int = 10) -> list[dict]:
-    import chromadb
-
-    client = chromadb.PersistentClient(path=str(DB_DIR))
-    collection = client.get_collection(
-        COLLECTION_NAME,
-        embedding_function=get_embedding_function(),
-    )
-
-    result = collection.query(query_texts=[query], n_results=top_k)
-    documents = result.get("documents", [[]])[0]
-    metadatas = result.get("metadatas", [[]])[0]
-    distances = result.get("distances", [[]])[0]
-    ids = result.get("ids", [[]])[0]
-
-    results = []
-    for doc_id, doc, meta, dist in zip(ids, documents, metadatas, distances):
-        # Chroma distance는 작을수록 유사합니다. UI용 score는 대략 높을수록 좋게 변환.
-        score = 1 / (1 + float(dist)) if dist is not None else 0.0
-        results.append(
-            {
-                "id": doc_id,
-                "title": meta.get("title", ""),
-                "content": doc,
-                "text": doc,
-                "category": meta.get("category", ""),
-                "source": meta.get("source", ""),
-                "date": meta.get("date", ""),
-                "score": round(score, 4),
-                "distance": dist,
-                "retrieval_method": "chroma",
-            }
-        )
-    return results
-
-
-def search_documents(query: str, top_k: int = 10) -> tuple[list[dict], dict]:
-    started = time.perf_counter()
-    method = "chroma"
-    try:
-        if DB_DIR.exists():
-            results = chroma_search(query, top_k=top_k)
-        else:
-            method = "keyword_fallback"
-            results = fallback_keyword_search(query, top_k=top_k)
-    except Exception as exc:
-        method = "keyword_fallback"
-        results = fallback_keyword_search(query, top_k=top_k)
-        elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
-        return results, {
-            "method": method,
-            "latency_ms": elapsed_ms,
-            "hit_count": len(results),
-            "warning": f"Chroma 검색 실패로 fallback 검색을 사용했습니다: {exc}",
+        return {
+            "query": query,
+            "top_k": top_k,
+            "results": results,
+            "meta": {
+                "method": "keyword_fallback",
+                "latency_ms": round((time.time() - started) * 1000, 2),
+                "hit_count": len(results),
+                "warning": warning,
+            },
         }
 
-    elapsed_ms = round((time.perf_counter() - started) * 1000, 2)
-    return results, {
-        "method": method,
-        "latency_ms": elapsed_ms,
-        "hit_count": len(results),
-        "warning": None,
-    }
+    def search(self, query: str, top_k: int = 10) -> dict:
+        started = time.time()
+
+        try:
+            client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
+            collection = client.get_collection(
+                COLLECTION_NAME,
+                embedding_function=self.embedding_function,
+            )
+
+            # 핵심 수정:
+            # Chroma query_texts가 embedding function 버전에 따라 깨질 수 있어서,
+            # 우리가 직접 query embedding을 만든 뒤 query_embeddings로 검색한다.
+            query_embedding = self.embedding_function.embed_query(query)
+
+            raw = collection.query(
+                query_embeddings=[query_embedding],
+                n_results=top_k,
+                include=["documents", "metadatas", "distances"],
+            )
+
+            ids = raw.get("ids", [[]])[0]
+            documents = raw.get("documents", [[]])[0]
+            metadatas = raw.get("metadatas", [[]])[0]
+            distances = raw.get("distances", [[]])[0]
+
+            results = []
+            for doc_id, content, metadata, distance in zip(
+                ids, documents, metadatas, distances
+            ):
+                metadata = metadata or {}
+                results.append({
+                    "id": doc_id,
+                    "title": metadata.get("title", ""),
+                    "content": content,
+                    "text": content,
+                    "category": metadata.get("category", ""),
+                    "source": metadata.get("source", ""),
+                    "date": metadata.get("date", ""),
+                    "score": None,
+                    "distance": distance,
+                    "retrieval_method": "chroma",
+                })
+
+            return {
+                "query": query,
+                "top_k": top_k,
+                "results": results,
+                "meta": {
+                    "method": "chroma",
+                    "latency_ms": round((time.time() - started) * 1000, 2),
+                    "hit_count": len(results),
+                    "warning": None,
+                },
+            }
+
+        except Exception as e:
+            return self._fallback_search(
+                query=query,
+                top_k=top_k,
+                warning=f"Chroma 검색 실패로 fallback 검색을 사용했습니다: {e}",
+            )

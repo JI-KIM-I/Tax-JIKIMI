@@ -18,9 +18,8 @@ class LocalHashEmbeddingFunction:
     """
     API 키 없이도 동작하는 로컬 해시 기반 임베딩 함수.
 
-    - 발표/개발 환경에서 OpenAI API 키가 없어도 ChromaDB 검색이 죽지 않게 하기 위한 fallback 임베딩
-    - 한국어 의미 검색 품질은 OpenAI 임베딩보다 낮지만, 벡터DB 구축/조회 흐름 검증에는 충분함
-    - ChromaDB 버전 차이에 대비해 __call__, embed_documents, embed_query를 모두 제공
+    ChromaDB 버전과 우리 retriever 코드 양쪽에서 모두 쓸 수 있도록
+    __call__, embed_documents, embed_query를 전부 제공한다.
     """
 
     def __init__(self, dim: int = 384):
@@ -30,9 +29,8 @@ class LocalHashEmbeddingFunction:
         return f"local-hash-embedding-{self.dim}"
 
     def _tokenize(self, text: str) -> list[str]:
-        text = text.lower()
-        tokens = re.findall(r"[가-힣a-zA-Z0-9]+", text)
-        return tokens
+        text = str(text).lower()
+        return re.findall(r"[가-힣a-zA-Z0-9]+", text)
 
     def _embed_one(self, text: str) -> list[float]:
         vector = [0.0] * self.dim
@@ -65,13 +63,12 @@ class LocalHashEmbeddingFunction:
 
 def get_embedding_function():
     """
-    ChromaDB에 전달할 embedding_function을 반환한다.
+    ChromaDB에 전달할 embedding function 반환.
 
-    기본값:
-    - local: API 키 없이 동작
-
-    선택:
-    - RAG_EMBEDDING_PROVIDER=openai 설정 시 OpenAI 임베딩 사용
+    기본값은 local이라 OpenAI API 키 없이도 실행된다.
+    OpenAI 임베딩을 쓰려면:
+      RAG_EMBEDDING_PROVIDER=openai
+      OPENAI_API_KEY=...
     """
     provider = DEFAULT_EMBEDDING_PROVIDER.lower()
 
