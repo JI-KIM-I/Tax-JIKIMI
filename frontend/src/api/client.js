@@ -31,4 +31,21 @@ export async function exportReport(payload) {
   return response.data;
 }
 
+/**
+ * RAG 챗봇에 질문 전송.
+ * @param {string} message - 사용자 질문
+ * @param {object|null} context - 현재 진단 결과 요약 (선택)
+ * @param {number} topK - 검색해올 문서 조각 개수
+ * @returns {Promise<{answer: string, sources: Array<{source: string, text: string}>}>}
+ */
+export async function sendChatMessage(message, context = null, topK = 4) {
+  // LLM 응답은 계산 API보다 오래 걸릴 수 있어 타임아웃을 늘려서 별도 호출합니다.
+  const response = await client.post(
+    "/api/chat",
+    { message, context, top_k: topK },
+    { timeout: 30000 }
+  );
+  return response.data;
+}
+
 export default client;

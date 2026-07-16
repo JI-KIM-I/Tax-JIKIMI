@@ -417,3 +417,240 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+
+/* ---------------------------------------------------------------------
+   챗봇 (AI Q&A)
+--------------------------------------------------------------------- */
+
+.chatbot-tab {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.chat-window {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: #fafbfa;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  min-height: 320px;
+  max-height: 460px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.chat-bubble-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.chat-bubble-row--user {
+  justify-content: flex-end;
+}
+
+.chat-avatar {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #eef4f1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2px;
+}
+
+.chat-bubble {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.chat-bubble p {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.chat-bubble--assistant {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-top-left-radius: 2px;
+}
+
+.chat-bubble--user {
+  background: var(--color-ink);
+  color: #fff;
+  border-top-right-radius: 2px;
+}
+
+.chat-bubble--loading {
+  color: var(--color-ink-soft);
+  font-style: italic;
+}
+
+.chat-sources {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--color-ink-soft);
+}
+
+.chat-sources summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.chat-sources ul {
+  margin: 6px 0 0;
+  padding-left: 16px;
+}
+
+.chat-error {
+  margin-bottom: 12px;
+}
+
+.suggested-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.suggested-question-btn {
+  background: #eef4f1;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.suggested-question-btn:hover:not(:disabled) {
+  border-color: var(--color-guard-green);
+  color: var(--color-guard-green);
+}
+
+.suggested-question-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.chat-input-row textarea {
+  flex: 1;
+  resize: none;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+}
+
+.chat-send-btn {
+  width: auto;
+  padding: 10px 20px;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------
+   챗봇 플로팅 위젯 (항상 화면 우측 하단에 떠있음)
+--------------------------------------------------------------------- */
+
+.chat-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--color-ink);
+  border: none;
+  box-shadow: 0 4px 16px rgba(22, 48, 46, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.2rem;
+  color: #fff;
+  z-index: 100;
+  transition: transform 0.15s ease;
+}
+
+.chat-fab:hover {
+  transform: scale(1.06);
+}
+
+.chat-widget-panel {
+  position: fixed;
+  bottom: 92px;
+  right: 24px;
+  width: 360px;
+  max-width: calc(100vw - 48px);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(22, 48, 46, 0.18);
+  padding: 16px;
+  z-index: 99;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-widget-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.chat-widget-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--color-ink);
+}
+
+.chat-widget-close {
+  background: none;
+  border: none;
+  color: var(--color-ink-soft);
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.chat-widget-subtitle {
+  font-size: 0.78rem;
+  color: var(--color-ink-soft);
+  margin: 4px 0 10px;
+}
+
+.chat-window--widget {
+  min-height: 260px;
+  max-height: 340px;
+}
+
+@media (max-width: 480px) {
+  .chat-widget-panel {
+    right: 12px;
+    left: 12px;
+    width: auto;
+  }
+  .chat-fab {
+    right: 16px;
+    bottom: 16px;
+  }
+}

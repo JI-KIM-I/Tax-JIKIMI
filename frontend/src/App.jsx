@@ -8,6 +8,7 @@ import PensionCompareTab from "./components/tabs/PensionCompareTab";
 import PensionTimingTab from "./components/tabs/PensionTimingTab";
 import LimitUsageTab from "./components/tabs/LimitUsageTab";
 import RecommendationsTab from "./components/tabs/RecommendationsTab";
+import ChatWidget from "./components/ChatWidget";
 import { runDiagnosis } from "./api/client";
 import "./App.css";
 
@@ -76,6 +77,8 @@ export default function App() {
           )}
         </main>
       </div>
+
+      <ChatWidget result={result} />
     </div>
   );
 }
