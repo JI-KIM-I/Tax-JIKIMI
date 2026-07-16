@@ -42,7 +42,9 @@ from taxguard_calculation_logic import (
     recommend_pension_start_age,
 )
 from rag.retriever import search_documents
+from dotenv import load_dotenv
 
+load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
