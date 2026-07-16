@@ -27,6 +27,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+
 from taxguard_calculation_logic import (
     DiagnosisRequest,
     FinancialIncomeTaxRequest,
@@ -358,90 +366,7 @@ def _build_report_text(result: Any) -> str:
     lines += ["", f"※ {result.disclaimer}"]
     return "\n".join(lines)
 
-
-def _build_report_pdf(result: Any) -> BytesIO:
-    from reportlab.lib import colors
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib.styles import ParagraphStyle
-    from reportlab.lib.units import mm
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-
-    # 폰트 파일은 배포하지 않습니다. 팀원이 backend/fonts/NanumGothic.ttf를 직접 넣으면 한글 PDF가 정상 출력됩니다.
-    font_name = "Helvetica"
-    for candidate in [
-        BASE_DIR / "fonts" / "NanumGothic.ttf",
-        Path("/usr/share/fonts/truetype/nanum/NanumGothic.ttf"),
-        Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
-    ]:
-        if candidate.exists():
-            try:
-                pdfmetrics.registerFont(TTFont("ReportFont", str(candidate)))
-                font_name = "ReportFont"
-                break
-            except Exception:
-                pass
-
-    buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=18 * mm, rightMargin=18 * mm, topMargin=18 * mm)
-    title = ParagraphStyle("title", fontName=font_name, fontSize=18, leading=24, textColor=colors.HexColor("#0B4DCC"))
-    heading = ParagraphStyle("heading", fontName=font_name, fontSize=12, leading=18, spaceBefore=10, textColor=colors.HexColor("#1F2937"))
-    body = ParagraphStyle("body", fontName=font_name, fontSize=9, leading=14)
-
-    def table(rows):
-        t = Table(rows, colWidths=[45 * mm, 105 * mm])
-        t.setStyle(
-            TableStyle(
-                [
-                    ("FONTNAME", (0, 0), (-1, -1), font_name),
-                    ("FONTSIZE", (0, 0), (-1, -1), 8),
-                    ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#D1D5DB")),
-                    ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#F3F4F6")),
-                    ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ]
-            )
-        )
-        return t
-
-    fit = result.financial_income_tax
-    pc = result.pension_compare
-    lu = result.limit_usage
-
-    story = [
-        Paragraph("절세지킴이 절세 진단 리포트", title),
-        Spacer(1, 8),
-        Paragraph(result.report_summary, body),
-        Paragraph("금융소득종합과세", heading),
-        table([
-            ["금융소득 합계", _won(fit.financial_income)],
-            ["기준 초과금액", _won(fit.excess_amount)],
-            ["예상 추가세액", _won(fit.additional_total_tax)],
-        ]),
-        Paragraph("연금 수령 방식 비교", heading),
-        table([
-            ["일시금 예상 세금", _won(pc.lump_total_tax)],
-            ["분할 수령 예상 세금", _won(pc.split_total_tax)],
-            ["예상 절세액", _won(pc.saving_by_split)],
-        ]),
-        Paragraph("절세 한도 활용", heading),
-        table([
-            ["ISA 활용률", _pct(lu.isa_annual_usage_rate)],
-            ["연금저축 활용률", _pct(lu.pension_savings_usage_rate)],
-            ["IRP 합산 활용률", _pct(lu.pension_irp_combined_usage_rate)],
-            ["예상 세액공제액", _won(lu.estimated_tax_credit)],
-        ]),
-        Paragraph("AI 추천사항", heading),
-    ]
-    for rec in result.recommendations:
-        story.append(Paragraph(f"• {rec}", body))
-    story.append(Paragraph("※ " + result.disclaimer, body))
-    doc.build(story)
-    buffer.seek(0)
-    return buffer
-
-
-def _build_report_image(result: Any) -> BytesIO:
+def _build_detailed_report_image_v2(result: Any) -> BytesIO:
     from PIL import Image, ImageDraw, ImageFont
 
     text = _build_report_text(result)
@@ -484,6 +409,309 @@ def _build_report_image(result: Any) -> BytesIO:
     buffer.seek(0)
     return buffer
 
+def _report_font_v2() -> str:
+    """
+    한글 PDF 출력을 위한 폰트 설정.
+    기존 _PDF_FONT가 있으면 그대로 쓰고, 없으면 Windows 맑은 고딕을 등록한다.
+    """
+    if "_PDF_FONT" in globals():
+        return globals()["_PDF_FONT"]
+
+    font_name = "MalgunGothic"
+    font_paths = [
+        "C:/Windows/Fonts/malgun.ttf",
+        "C:/Windows/Fonts/malgunbd.ttf",
+        "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+    ]
+
+    for path in font_paths:
+        if os.path.exists(path):
+            try:
+                pdfmetrics.registerFont(TTFont(font_name, path))
+                return font_name
+            except Exception:
+                pass
+
+    return "Helvetica"
+
+
+def _won_v2(value) -> str:
+    try:
+        return f"{round(float(value)):,}원"
+    except Exception:
+        return "-"
+
+
+def _pct_v2(value) -> str:
+    try:
+        return f"{float(value) * 100:.1f}%"
+    except Exception:
+        return "-"
+
+
+def _get_v2(obj, name: str, default=None):
+    return getattr(obj, name, default) if obj is not None else default
+
+
+def _table_v2(header: list[str], rows: list[list[str]]) -> Table:
+    font = _report_font_v2()
+    data = [header] + rows
+
+    table = Table(data, hAlign="LEFT", repeatRows=1)
+
+    table.setStyle(
+        TableStyle(
+            [
+                ("FONTNAME", (0, 0), (-1, -1), font),
+                ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+                ("LEADING", (0, 0), (-1, -1), 11),
+
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EEF4F1")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#16302E")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#DDE6E3")),
+
+                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                ("ALIGN", (0, 0), (0, -1), "LEFT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+                ("LEFTPADDING", (0, 0), (-1, -1), 6),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+            ]
+        )
+    )
+
+    return table
+
+
+def _build_detailed_report_pdf_v2(result) -> BytesIO:
+    
+    font = _report_font_v2()
+
+    body = ParagraphStyle(
+        "report_body_v2",
+        fontName=font,
+        fontSize=10,
+        leading=14,
+        spaceAfter=4,
+        textColor=colors.HexColor("#222222"),
+    )
+
+    heading = ParagraphStyle(
+        "report_heading_v2",
+        fontName=font,
+        fontSize=13,
+        leading=18,
+        spaceBefore=14,
+        spaceAfter=6,
+        textColor=colors.HexColor("#16302E"),
+    )
+
+    title = ParagraphStyle(
+        "report_title_v2",
+        fontName=font,
+        fontSize=18,
+        leading=24,
+        spaceAfter=10,
+        textColor=colors.HexColor("#16302E"),
+    )
+
+    muted = ParagraphStyle(
+        "report_muted_v2",
+        fontName=font,
+        fontSize=8.5,
+        leading=12,
+        textColor=colors.HexColor("#4D6462"),
+    )
+
+    buffer = BytesIO()
+
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        topMargin=18 * mm,
+        bottomMargin=18 * mm,
+        leftMargin=18 * mm,
+        rightMargin=18 * mm,
+    )
+
+    fit = _get_v2(result, "financial_income_tax")
+    ps = _get_v2(result, "product_shift")
+    pc = _get_v2(result, "pension_compare")
+    lu = _get_v2(result, "limit_usage")
+    pension_rec = _get_v2(result, "pension_start_recommendation")
+
+    story = []
+
+    # 제목 + 요약
+    story.append(Paragraph("세금지킴이 절세 진단 리포트", title))
+    story.append(Paragraph(str(_get_v2(result, "report_summary", "")), body))
+    story.append(Spacer(1, 8))
+
+    # 금융소득종합과세 진단
+    story.append(Paragraph("금융소득종합과세 진단", heading))
+    story.append(Paragraph(str(_get_v2(fit, "message", "")), body))
+    story.append(
+        _table_v2(
+            ["항목", "금액"],
+            [
+                ["금융소득 합계", _won_v2(_get_v2(fit, "financial_income", 0))],
+                ["2,000만원 초과분", _won_v2(_get_v2(fit, "excess_amount", 0))],
+                ["기본계산 산출세액", _won_v2(_get_v2(fit, "basic_national_tax", 0))],
+                ["비교계산 산출세액", _won_v2(_get_v2(fit, "compare_national_tax", 0))],
+                ["최종 산출세액", _won_v2(_get_v2(fit, "final_national_tax", 0))],
+                ["예상 추가 국세", _won_v2(_get_v2(fit, "additional_national_tax", 0))],
+                ["예상 추가 지방세", _won_v2(_get_v2(fit, "additional_local_tax", 0))],
+                ["예상 추가세액 합계", _won_v2(_get_v2(fit, "additional_total_tax", 0))],
+            ],
+        )
+    )
+
+    recommendation = _get_v2(ps, "recommendation", "")
+    if recommendation:
+        story.append(Spacer(1, 6))
+        story.append(Paragraph(str(recommendation), body))
+
+    # 연금 일시금 vs 분할 수령 비교
+    story.append(Paragraph("연금 일시금 vs 분할 수령 비교", heading))
+
+    rate_note = _get_v2(pc, "rate_note", "")
+    if rate_note:
+        story.append(Paragraph(str(rate_note), muted))
+
+    pension_message = _get_v2(pc, "message", "")
+    if pension_message:
+        story.append(Paragraph(str(pension_message), body))
+
+    annual_taxes = _get_v2(pc, "annual_taxes", []) or []
+
+    if annual_taxes:
+        annual_rows = []
+
+        for a in annual_taxes:
+            rate = _get_v2(a, "national_tax_rate", _get_v2(a, "tax_rate", 0))
+            annual_rows.append(
+                [
+                    str(_get_v2(a, "year", "")),
+                    f"{_get_v2(a, 'age', '')}세",
+                    _won_v2(_get_v2(a, "annual_amount", 0)),
+                    _pct_v2(rate),
+                    _won_v2(_get_v2(a, "total_tax", _get_v2(a, "annual_tax", 0))),
+                    _won_v2(_get_v2(a, "cumulative_tax", 0)),
+                ]
+            )
+
+        story.append(
+            _table_v2(
+                ["연차", "나이", "연간 수령액", "세율", "연간 세금", "누적 세금"],
+                annual_rows,
+            )
+        )
+    else:
+        story.append(
+            _table_v2(
+                ["항목", "금액"],
+                [
+                    ["일시금 예상 세금", _won_v2(_get_v2(pc, "lump_total_tax", 0))],
+                    ["분할 수령 예상 세금", _won_v2(_get_v2(pc, "split_total_tax", 0))],
+                    ["예상 절세액", _won_v2(_get_v2(pc, "tax_saving", 0))],
+                ],
+            )
+        )
+
+    # 연금 수령 시작 시점 추천
+    if pension_rec:
+        story.append(Paragraph("연금 수령 시작 시점 추천", heading))
+        story.append(
+            Paragraph(
+                f"추천 시작 나이: <b>{_get_v2(pension_rec, 'recommended_start_age', '-')}세</b> "
+                f"(예상 분할 수령 세금 {_won_v2(_get_v2(pension_rec, 'expected_split_total_tax', 0))})",
+                body,
+            )
+        )
+
+        reason = _get_v2(pension_rec, "reason", "")
+        if reason:
+            story.append(Paragraph(str(reason), body))
+
+    # ISA · 연금저축 · IRP 한도 활용
+    story.append(Paragraph("ISA · 연금저축 · IRP 절세 한도 활용", heading))
+
+    limit_message = _get_v2(lu, "message", "")
+    if limit_message:
+        story.append(Paragraph(str(limit_message), body))
+
+    story.append(
+        _table_v2(
+            ["구분", "납입/사용액", "한도", "활용률"],
+            [
+                [
+                    "ISA 연간",
+                    _won_v2(_get_v2(lu, "isa_paid_this_year", 0)),
+                    _won_v2(_get_v2(lu, "isa_annual_limit", 0)),
+                    _pct_v2(_get_v2(lu, "isa_annual_usage_rate", 0)),
+                ],
+                [
+                    "ISA 누적",
+                    _won_v2(_get_v2(lu, "isa_total_paid", 0)),
+                    _won_v2(_get_v2(lu, "isa_total_limit", 0)),
+                    _pct_v2(_get_v2(lu, "isa_total_usage_rate", 0)),
+                ],
+                [
+                    "연금저축+IRP 합산",
+                    _won_v2(_get_v2(lu, "combined_pension_paid", 0)),
+                    _won_v2(_get_v2(lu, "pension_irp_combined_tax_credit_limit", 0)),
+                    _pct_v2(_get_v2(lu, "pension_irp_combined_usage_rate", 0)),
+                ],
+            ],
+        )
+    )
+
+    story.append(Spacer(1, 6))
+    story.append(
+        Paragraph(
+            f"예상 세액공제액: <b>{_won_v2(_get_v2(lu, 'estimated_tax_credit', 0))}</b>",
+            body,
+        )
+    )
+
+    # AI 추천사항
+    recommendations = _get_v2(result, "recommendations", []) or []
+    if recommendations:
+        story.append(Paragraph("AI 추천사항", heading))
+        for i, rec_text in enumerate(recommendations, start=1):
+            story.append(Paragraph(f"{i}. {rec_text}", body))
+
+    # 시나리오별 예상 세금 비교
+    scenarios = _get_v2(result, "scenario_comparison", []) or []
+    if scenarios:
+        story.append(Paragraph("시나리오별 예상 세금 비교", heading))
+        story.append(
+            _table_v2(
+                ["시나리오", "예상 세금", "절세액", "절세율"],
+                [
+                    [
+                        str(_get_v2(s, "scenario_name", "")),
+                        _won_v2(_get_v2(s, "estimated_tax", 0)),
+                        _won_v2(_get_v2(s, "saving_amount", 0)),
+                        _pct_v2(_get_v2(s, "saving_rate", 0)),
+                    ]
+                    for s in scenarios
+                ],
+            )
+        )
+
+    # 하단 유의사항
+    disclaimer = _get_v2(result, "disclaimer", "")
+    if disclaimer:
+        story.append(Spacer(1, 10))
+        story.append(Paragraph(f"※ {disclaimer}", muted))
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer
 
 @app.post("/api/report/export")
 def api_report_export(body: ReportExportRequestBody):
@@ -506,7 +734,7 @@ def api_report_export(body: ReportExportRequestBody):
             headers={"Content-Disposition": "attachment; filename=taxguard_report.png"},
         )
 
-    pdf = _build_report_pdf(result)
+    pdf = _build_detailed_report_pdf_v2(result)
     return StreamingResponse(
         pdf,
         media_type="application/pdf",
