@@ -1,7 +1,5 @@
 """절세지킴이 FastAPI 백엔드.
 
-프론트 화면 기능과 연결되는 엔드포인트를 모두 제공합니다.
-
 실행:
     cd backend
     pip install -r requirements.txt
