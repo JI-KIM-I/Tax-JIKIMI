@@ -216,3 +216,18 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Project env files
+backend/.env
+
+# Backend generated logs
+backend/logs/
+*.jsonl
+
+# ChromaDB generated vector database
+backend/rag/chroma_db/
+
+# Node generated files
+node_modules/
+frontend/node_modules/
+frontend/dist/
