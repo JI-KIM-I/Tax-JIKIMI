@@ -117,19 +117,23 @@ class RAGRetriever:
             return self._fallback_search(query, top_k, f"Chroma 검색 실패로 fallback 검색을 사용했습니다: {e}")
 
 
-_retriever: RAGRetriever | None = None
+_retriever_instance = None
 
 
 def get_retriever() -> RAGRetriever:
-    global _retriever
-    if _retriever is None:
-        _retriever = RAGRetriever()
-    return _retriever
+    global _retriever_instance
+
+    if _retriever_instance is None:
+        _retriever_instance = RAGRetriever()
+
+    return _retriever_instance
 
 
-def search_documents(query: str, top_k: int = 10) -> dict[str, Any]:
-    return get_retriever().search(query=query, top_k=top_k)
+def search_documents(query: str, top_k: int = 10):
+    retriever = get_retriever()
+    data = retriever.search(query=query, top_k=top_k)
 
+    results = data.get("results", [])
+    meta = data.get("meta", {})
 
-def retrieve_chunks(query: str, top_k: int = 4) -> list[dict[str, Any]]:
-    return search_documents(query=query, top_k=top_k).get("results", [])
+    return results, meta
