@@ -415,11 +415,12 @@ def _report_font_v2() -> str:
 
     font_name = "MalgunGothic"
     font_paths = [
-        "C:/Windows/Fonts/malgun.ttf",
-        "C:/Windows/Fonts/malgunbd.ttf",
-        "/System/Library/Fonts/AppleSDGothicNeo.ttc",
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
-    ]
+    str(BASE_DIR / "fonts" / "NanumGothic.ttf"),
+    "C:/Windows/Fonts/malgun.ttf",
+    "C:/Windows/Fonts/malgunbd.ttf",
+    "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+]
 
     for path in font_paths:
         if os.path.exists(path):
@@ -892,7 +893,9 @@ def _fallback_chat_answer(question: str, context: Optional[dict], docs: list[dic
             + ISA_POLICY_WARNING
         )
 
-    first_doc = docs[0]["content"] if docs else ""
+    first_doc = ""
+    if docs:
+        first_doc = docs[0].get("content") or docs[0].get("text") or ""
     return (
         "관련 문서를 검색한 결과를 바탕으로 보면, 입력값 기준의 예상 계산으로 접근하는 것이 안전합니다. "
         + (first_doc[:180] + " " if first_doc else "")
@@ -914,10 +917,9 @@ def _call_openai(prompt: str) -> Optional[str]:
             temperature=0.2,
         )
         return completion.choices[0].message.content
-    except Exception as exc:
+    except Exception:
         logger.exception("OpenAI API failed")
-        return f"OpenAI API 호출에 실패하여 검색 결과 기반으로 답변합니다. 오류: {exc}"
-
+        return None
 
 @app.post("/api/chat")
 def api_chat(body: ChatRequestBody):
