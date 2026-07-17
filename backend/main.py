@@ -1,14 +1,3 @@
-"""절세지킴이 FastAPI 백엔드.
-
-실행:
-    cd backend
-    pip install -r requirements.txt
-    python rag/build_index.py
-    uvicorn main:app --reload
-
-Swagger 문서:
-    http://localhost:8000/docs
-"""
 from __future__ import annotations
 
 import json
@@ -57,6 +46,12 @@ BASE_DIR = Path(__file__).resolve().parent
 LOG_DIR = BASE_DIR / "logs"
 LOG_DIR.mkdir(exist_ok=True)
 API_LOG_PATH = LOG_DIR / "api_requests.jsonl"
+
+ISA_POLICY_WARNING = (
+    "※ ISA 비과세 한도 500만원(일반형)·1,000만원(서민·농어민형) 확대안은 "
+    "개정 추진 또는 시행 여부 확인이 필요한 항목입니다. "
+    "본 서비스의 계산은 현행 기준을 중심으로 한 예상 계산입니다."
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("taxjikimi")
@@ -350,6 +345,7 @@ def _build_report_text(result: Any) -> str:
         f"- 연금저축 활용률: {_pct(lu.pension_savings_usage_rate)}",
         f"- 연금저축+IRP 합산 활용률: {_pct(lu.pension_irp_combined_usage_rate)}",
         f"- 예상 세액공제액: {_won(lu.estimated_tax_credit)}",
+        f"- 참고: {ISA_POLICY_WARNING}",
         "",
         "[AI 추천사항]",
     ]
@@ -419,11 +415,12 @@ def _report_font_v2() -> str:
 
     font_name = "MalgunGothic"
     font_paths = [
-        "C:/Windows/Fonts/malgun.ttf",
-        "C:/Windows/Fonts/malgunbd.ttf",
-        "/System/Library/Fonts/AppleSDGothicNeo.ttc",
-        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
-    ]
+    str(BASE_DIR / "fonts" / "NanumGothic.ttf"),
+    "C:/Windows/Fonts/malgun.ttf",
+    "C:/Windows/Fonts/malgunbd.ttf",
+    "/System/Library/Fonts/AppleSDGothicNeo.ttc",
+    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+]
 
     for path in font_paths:
         if os.path.exists(path):
@@ -486,6 +483,56 @@ def _table_v2(header: list[str], rows: list[list[str]]) -> Table:
     return table
 
 
+def _split_long_text_v2(text, max_chars: int = 650) -> list[str]:
+    """
+    긴 문단이 PDF에서 잘리지 않도록 여러 문단으로 나눈다.
+    텍스트를 삭제하지 않고, 가능한 문장 끝 기준으로 자른다.
+    """
+    if text is None:
+        return []
+
+    text = str(text).replace("\r\n", "\n").strip()
+
+    if not text:
+        return []
+
+    result = []
+
+    for paragraph in text.split("\n"):
+        paragraph = paragraph.strip()
+
+        if not paragraph:
+            continue
+
+        while len(paragraph) > max_chars:
+            cut_candidates = [
+                paragraph.rfind("다.", 0, max_chars),
+                paragraph.rfind("요.", 0, max_chars),
+                paragraph.rfind(".", 0, max_chars),
+                paragraph.rfind(" ", 0, max_chars),
+            ]
+
+            cut = max(cut_candidates)
+
+            if cut < int(max_chars * 0.5):
+                cut = max_chars
+
+            result.append(paragraph[: cut + 1].strip())
+            paragraph = paragraph[cut + 1 :].strip()
+
+        if paragraph:
+            result.append(paragraph)
+
+    return result
+
+
+def _append_paragraphs_v2(story, text, style, max_chars: int = 650):
+    """
+    긴 텍스트를 여러 Paragraph로 안전하게 추가한다.
+    """
+    for chunk in _split_long_text_v2(text, max_chars=max_chars):
+        story.append(Paragraph(chunk, style))
+
 def _build_detailed_report_pdf_v2(result) -> BytesIO:
     
     font = _report_font_v2()
@@ -497,6 +544,7 @@ def _build_detailed_report_pdf_v2(result) -> BytesIO:
         leading=14,
         spaceAfter=4,
         textColor=colors.HexColor("#222222"),
+        wordWrap="CJK",
     )
 
     heading = ParagraphStyle(
@@ -507,6 +555,7 @@ def _build_detailed_report_pdf_v2(result) -> BytesIO:
         spaceBefore=14,
         spaceAfter=6,
         textColor=colors.HexColor("#16302E"),
+        wordWrap="CJK",
     )
 
     title = ParagraphStyle(
@@ -516,6 +565,7 @@ def _build_detailed_report_pdf_v2(result) -> BytesIO:
         leading=24,
         spaceAfter=10,
         textColor=colors.HexColor("#16302E"),
+        wordWrap="CJK",
     )
 
     muted = ParagraphStyle(
@@ -524,6 +574,7 @@ def _build_detailed_report_pdf_v2(result) -> BytesIO:
         fontSize=8.5,
         leading=12,
         textColor=colors.HexColor("#4D6462"),
+        wordWrap="CJK",
     )
 
     buffer = BytesIO()
@@ -547,12 +598,12 @@ def _build_detailed_report_pdf_v2(result) -> BytesIO:
 
     # 제목 + 요약
     story.append(Paragraph("세금지킴이 절세 진단 리포트", title))
-    story.append(Paragraph(str(_get_v2(result, "report_summary", "")), body))
+    _append_paragraphs_v2(story, _get_v2(result, "report_summary", ""), body)
     story.append(Spacer(1, 8))
 
     # 금융소득종합과세 진단
     story.append(Paragraph("금융소득종합과세 진단", heading))
-    story.append(Paragraph(str(_get_v2(fit, "message", "")), body))
+    _append_paragraphs_v2(story, _get_v2(fit, "message", ""), body)
     story.append(
         _table_v2(
             ["항목", "금액"],
@@ -572,18 +623,18 @@ def _build_detailed_report_pdf_v2(result) -> BytesIO:
     recommendation = _get_v2(ps, "recommendation", "")
     if recommendation:
         story.append(Spacer(1, 6))
-        story.append(Paragraph(str(recommendation), body))
+        _append_paragraphs_v2(story, recommendation, body)
 
     # 연금 일시금 vs 분할 수령 비교
     story.append(Paragraph("연금 일시금 vs 분할 수령 비교", heading))
 
     rate_note = _get_v2(pc, "rate_note", "")
     if rate_note:
-        story.append(Paragraph(str(rate_note), muted))
+        _append_paragraphs_v2(story, rate_note, muted)
 
     pension_message = _get_v2(pc, "message", "")
     if pension_message:
-        story.append(Paragraph(str(pension_message), body))
+        _append_paragraphs_v2(story, pension_message, body)
 
     annual_taxes = _get_v2(pc, "annual_taxes", []) or []
 
@@ -634,14 +685,14 @@ def _build_detailed_report_pdf_v2(result) -> BytesIO:
 
         reason = _get_v2(pension_rec, "reason", "")
         if reason:
-            story.append(Paragraph(str(reason), body))
+            _append_paragraphs_v2(story, reason, body)
 
     # ISA · 연금저축 · IRP 한도 활용
     story.append(Paragraph("ISA · 연금저축 · IRP 절세 한도 활용", heading))
 
     limit_message = _get_v2(lu, "message", "")
     if limit_message:
-        story.append(Paragraph(str(limit_message), body))
+        _append_paragraphs_v2(story, limit_message, body)
 
     story.append(
         _table_v2(
@@ -676,13 +727,15 @@ def _build_detailed_report_pdf_v2(result) -> BytesIO:
             body,
         )
     )
+    story.append(Spacer(1, 4))
+    _append_paragraphs_v2(story, ISA_POLICY_WARNING, muted)
 
     # AI 추천사항
     recommendations = _get_v2(result, "recommendations", []) or []
     if recommendations:
         story.append(Paragraph("AI 추천사항", heading))
         for i, rec_text in enumerate(recommendations, start=1):
-            story.append(Paragraph(f"{i}. {rec_text}", body))
+            _append_paragraphs_v2(story, f"{i}. {rec_text}", body)
 
     # 시나리오별 예상 세금 비교
     scenarios = _get_v2(result, "scenario_comparison", []) or []
@@ -707,7 +760,7 @@ def _build_detailed_report_pdf_v2(result) -> BytesIO:
     disclaimer = _get_v2(result, "disclaimer", "")
     if disclaimer:
         story.append(Spacer(1, 10))
-        story.append(Paragraph(f"※ {disclaimer}", muted))
+        _append_paragraphs_v2(story, f"※ {disclaimer}", muted)
 
     doc.build(story)
     buffer.seek(0)
@@ -836,10 +889,13 @@ def _fallback_chat_answer(question: str, context: Optional[dict], docs: list[dic
             "절세 한도는 ISA, 연금저축, IRP 납입액을 기준으로 활용률을 계산합니다. "
             f"현재 진단 기준 예상 세액공제액은 약 {_won(limit.get('estimated_tax_credit', 0))}입니다. "
             "연금저축과 IRP는 합산 한도를 초과하면 추가 납입분이 같은 방식으로 공제되지 않을 수 있으니, "
-            "먼저 올해 납입액과 남은 한도를 확인하는 것이 좋습니다."
+            "먼저 올해 납입액과 남은 한도를 확인하는 것이 좋습니다. "
+            + ISA_POLICY_WARNING
         )
 
-    first_doc = docs[0]["content"] if docs else ""
+    first_doc = ""
+    if docs:
+        first_doc = docs[0].get("content") or docs[0].get("text") or ""
     return (
         "관련 문서를 검색한 결과를 바탕으로 보면, 입력값 기준의 예상 계산으로 접근하는 것이 안전합니다. "
         + (first_doc[:180] + " " if first_doc else "")
@@ -856,15 +912,14 @@ def _call_openai(prompt: str) -> Optional[str]:
 
         client = OpenAI(api_key=api_key)
         completion = client.chat.completions.create(
-            model=os.getenv("OPENAI_CHAT_MODEL", "gpt-4o-mini"),
+            model=os.getenv("OPENAI_CHAT_MODEL") or os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
         )
         return completion.choices[0].message.content
-    except Exception as exc:
+    except Exception:
         logger.exception("OpenAI API failed")
-        return f"OpenAI API 호출에 실패하여 검색 결과 기반으로 답변합니다. 오류: {exc}"
-
+        return None
 
 @app.post("/api/chat")
 def api_chat(body: ChatRequestBody):
