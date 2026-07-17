@@ -727,7 +727,7 @@ def api_report_export(body: ReportExportRequestBody):
         )
 
     if fmt in {"image", "png"}:
-        img = _build_report_image(result)
+        img = _build_detailed_report_image_v2(result)
         return StreamingResponse(
             img,
             media_type="image/png",
