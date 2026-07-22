@@ -14,7 +14,7 @@ from typing import Any, Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from reportlab.lib import colors
@@ -122,10 +122,23 @@ def _log_api(endpoint: str, payload: dict, latency_ms: float, extra: Optional[di
 # FastAPI 앱 설정
 # -----------------------------------------------------------------------------
 
+class UTF8JSONResponse(JSONResponse):
+    """배포 환경에서 한글 응답이 깨져 보이는 문제 대응.
+
+    Starlette 기본 JSONResponse는 Content-Type을 그냥 'application/json'으로만 보내는데,
+    JSON 스펙상 UTF-8이 기본이라 문제없어야 하지만 일부 브라우저/프록시가 charset을 명시하지
+    않으면 시스템 기본 인코딩(EUC-KR/CP949 등)으로 잘못 해석해서 한글이 깨지는 경우가 있습니다.
+    charset=utf-8을 명시해서 이런 애매함을 없앱니다.
+    """
+
+    media_type = "application/json; charset=utf-8"
+
+
 app = FastAPI(
     title="절세지킴이 API",
     description="AI 기반 절세 진단 + RAG 챗봇 백엔드",
     version="1.0.0",
+    default_response_class=UTF8JSONResponse,
 )
 
 cors_origins = os.getenv(
