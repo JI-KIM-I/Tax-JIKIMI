@@ -170,6 +170,26 @@
   pointer-events: none;
 }
 
+/* "원" 같은 단위는 입력값 안에 안 섞이게, 입력칸 오른쪽에 회색 글자로 따로 얹습니다 */
+.field-number-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.field-number-wrap .field-number-input {
+  width: 100%;
+  padding-right: 34px;
+}
+
+.field-number-unit {
+  position: absolute;
+  right: 10px;
+  font-size: 0.82rem;
+  color: var(--color-ink-soft);
+  pointer-events: none;
+}
+
 .field input[type="checkbox"] {
   width: 18px;
   height: 18px;
