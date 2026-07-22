@@ -37,19 +37,31 @@ function Field({ label, hint, children }) {
   );
 }
 
-function NumberField({ label, hint, name, value, onChange, min, max, step = 1000000 }) {
+// 천단위 쉼표 + 단위("원")를 보여주려고 type="text"를 씁니다 (type="number"는 쉼표·글자를
+// 입력할 수 없어요 — 그 대신 위/아래 스피너 화살표는 없어집니다). 표시할 땐 쉼표와 단위를
+// 붙이고, 입력이 바뀌면 숫자만 남기고 나머지는 다 떼어내 부모 state로 전달합니다.
+// 나이처럼 "원" 단위가 안 맞는 필드는 unit="" 으로 꺼둘 수 있습니다.
+function NumberField({ label, hint, name, value, onChange, unit = "원" }) {
+  const displayValue =
+    value === "" || value === null || value === undefined
+      ? ""
+      : `${Number(value).toLocaleString("ko-KR")}${unit}`;
+
+  const handleChange = (e) => {
+    const raw = e.target.value.replace(/[^\d]/g, "");
+    onChange({ target: { name, type: "number", value: raw } });
+  };
+
   return (
     <Field label={label} hint={hint}>
       <input
-        type="number"
-        name={name}
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={onChange}
-        onFocus={selectAllOnFocus}
+        type="text"
         inputMode="numeric"
+        name={name}
+        value={displayValue}
+        onChange={handleChange}
+        onFocus={selectAllOnFocus}
+        className="field-number-input"
       />
     </Field>
   );
@@ -94,18 +106,14 @@ export default function DiagnosisForm({ onSubmit, loading }) {
         <NumberField
           label="현재 나이"
           name="age"
-          min="19"
-          max="100"
-          step={1}
+          unit=""
           value={form.age}
           onChange={handleChange}
         />
         <NumberField
           label="연금 수령 예정 나이"
           name="retirement_age"
-          min={form.age}
-          max="100"
-          step={1}
+          unit=""
           value={form.retirement_age}
           onChange={handleChange}
         />
