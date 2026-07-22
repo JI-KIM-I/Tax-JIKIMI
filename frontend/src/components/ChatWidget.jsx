@@ -210,6 +210,8 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
   const [justAddedIndex, setJustAddedIndex] = useState(null);
   const [showIntroBubble, setShowIntroBubble] = useState(false);
   const scrollRef = useRef(null);
+  const inputRef = useRef(null);
+  const composingRef = useRef(false);
   const enterTimerRef = useRef(null);
   const introTimerRef = useRef(null);
 
@@ -297,7 +299,7 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
   };
 
   const handleSend = async (text) => {
-    const question = (text ?? input).trim();
+    const question = (text ?? inputRef.current?.value ?? input).trim();
     if (!question || loading) return;
 
     // 이전에 확인 대기 중이던 추출 결과가 있으면, 새 질문을 우선하고 취소합니다.
@@ -363,8 +365,11 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
+      // Korean/Japanese IME composition also uses Enter to confirm the current syllable.
+      // Sending before composition ends can re-apply the final character after setInput("").
+      if (composingRef.current || e.nativeEvent.isComposing || e.keyCode === 229) return;
       e.preventDefault();
-      handleSend();
+      handleSend(e.currentTarget.value);
     }
   };
 
@@ -544,8 +549,16 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
             }}
           >
             <textarea
+              ref={inputRef}
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onCompositionStart={() => {
+                composingRef.current = true;
+              }}
+              onCompositionEnd={(e) => {
+                composingRef.current = false;
+                setInput(e.currentTarget.value);
+              }}
               onKeyDown={handleKeyDown}
               placeholder="궁금한 점을 입력해주세요."
               rows={2}
