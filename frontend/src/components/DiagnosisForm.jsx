@@ -37,15 +37,13 @@ function Field({ label, hint, children }) {
   );
 }
 
-// 천단위 쉼표 + 단위("원")를 보여주려고 type="text"를 씁니다 (type="number"는 쉼표·글자를
-// 입력할 수 없어요 — 그 대신 위/아래 스피너 화살표는 없어집니다). 표시할 땐 쉼표와 단위를
-// 붙이고, 입력이 바뀌면 숫자만 남기고 나머지는 다 떼어내 부모 state로 전달합니다.
+// 천단위 쉼표를 보여주려고 type="text"를 씁니다 (type="number"는 쉼표를 입력할 수 없어요 —
+// 그 대신 위/아래 스피너 화살표는 없어집니다). "원" 단위는 입력값 안에 같이 넣지 않고,
+// 입력칸 오른쪽에 회색 글자로 따로 얹어서 보여줍니다 (편집할 때 방해되지 않게).
 // 나이처럼 "원" 단위가 안 맞는 필드는 unit="" 으로 꺼둘 수 있습니다.
 function NumberField({ label, hint, name, value, onChange, unit = "원" }) {
   const displayValue =
-    value === "" || value === null || value === undefined
-      ? ""
-      : `${Number(value).toLocaleString("ko-KR")}${unit}`;
+    value === "" || value === null || value === undefined ? "" : Number(value).toLocaleString("ko-KR");
 
   const handleChange = (e) => {
     const raw = e.target.value.replace(/[^\d]/g, "");
@@ -54,15 +52,18 @@ function NumberField({ label, hint, name, value, onChange, unit = "원" }) {
 
   return (
     <Field label={label} hint={hint}>
-      <input
-        type="text"
-        inputMode="numeric"
-        name={name}
-        value={displayValue}
-        onChange={handleChange}
-        onFocus={selectAllOnFocus}
-        className="field-number-input"
-      />
+      <div className="field-number-wrap">
+        <input
+          type="text"
+          inputMode="numeric"
+          name={name}
+          value={displayValue}
+          onChange={handleChange}
+          onFocus={selectAllOnFocus}
+          className="field-number-input"
+        />
+        {unit && <span className="field-number-unit">{unit}</span>}
+      </div>
     </Field>
   );
 }
@@ -106,14 +107,14 @@ export default function DiagnosisForm({ onSubmit, loading }) {
         <NumberField
           label="현재 나이"
           name="age"
-          unit=""
+          unit="세"
           value={form.age}
           onChange={handleChange}
         />
         <NumberField
           label="연금 수령 예정 나이"
           name="retirement_age"
-          unit=""
+          unit="세"
           value={form.retirement_age}
           onChange={handleChange}
         />
