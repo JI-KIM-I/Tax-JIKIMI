@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from main import app
+from main import _report_font_v2, app
 
 client = TestClient(app)
 
@@ -36,3 +36,14 @@ def test_chat_fallback():
     r = client.post("/api/chat", json={"message": "연금 분할 수령하면 얼마나 유리해?", "context": ctx, "top_k": 3})
     assert r.status_code == 200
     assert "answer" in r.json()
+
+def test_pdf_report_uses_korean_font():
+    assert _report_font_v2() == "NanumGothic"
+
+
+def test_pdf_report_export():
+    r = client.post("/api/report/export", json={**sample, "format": "pdf"})
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "application/pdf"
+    assert r.content.startswith(b"%PDF")
+    assert b"NanumGothic" in r.content

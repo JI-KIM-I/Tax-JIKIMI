@@ -408,29 +408,31 @@ def _build_detailed_report_image_v2(result: Any) -> BytesIO:
 def _report_font_v2() -> str:
     """
     한글 PDF 출력을 위한 폰트 설정.
-    기존 _PDF_FONT가 있으면 그대로 쓰고, 없으면 Windows 맑은 고딕을 등록한다.
+    기존 _PDF_FONT가 있으면 그대로 쓰고, 없으면 프로젝트에 포함된 한글 TTF를 우선 등록한다.
     """
     if "_PDF_FONT" in globals():
         return globals()["_PDF_FONT"]
 
-    font_name = "MalgunGothic"
-    font_paths = [
-    str(BASE_DIR / "fonts" / "NanumGothic.ttf"),
-    "C:/Windows/Fonts/malgun.ttf",
-    "C:/Windows/Fonts/malgunbd.ttf",
-    "/System/Library/Fonts/AppleSDGothicNeo.ttc",
-    "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
-]
+    font_candidates = [
+        ("NanumGothic", BASE_DIR / "fonts" / "NanumGothic.ttf"),
+        ("MalgunGothic", Path("C:/Windows/Fonts/malgun.ttf")),
+        ("MalgunGothic", Path("C:/Windows/Fonts/malgunbd.ttf")),
+        ("NanumGothic", Path("/usr/share/fonts/truetype/nanum/NanumGothic.ttf")),
+    ]
 
-    for path in font_paths:
-        if os.path.exists(path):
+    checked_paths = []
+    for font_name, path in font_candidates:
+        checked_paths.append(str(path))
+        if path.exists():
             try:
-                pdfmetrics.registerFont(TTFont(font_name, path))
+                pdfmetrics.registerFont(TTFont(font_name, str(path)))
+                globals()["_PDF_FONT"] = font_name
                 return font_name
             except Exception:
-                pass
+                logger.warning("pdf font registration failed: %s", path, exc_info=True)
 
-    return "Helvetica"
+    logger.error("No Korean-compatible PDF font found. checked=%s", checked_paths)
+    raise RuntimeError("Korean PDF font is not available")
 
 
 def _won_v2(value) -> str:
@@ -787,7 +789,11 @@ def api_report_export(body: ReportExportRequestBody):
             headers={"Content-Disposition": "attachment; filename=taxguard_report.png"},
         )
 
-    pdf = _build_detailed_report_pdf_v2(result)
+    try:
+        pdf = _build_detailed_report_pdf_v2(result)
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
     return StreamingResponse(
         pdf,
         media_type="application/pdf",
