@@ -1,34 +1,13 @@
-import { useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer } from "recharts";
 import { won, pct } from "../../utils/format";
-import { exportReport } from "../../api/client";
 
-export default function RecommendationsTab({ result, requestPayload }) {
-  const [downloading, setDownloading] = useState(false);
-
+// 리포트 다운로드 버튼은 SummaryCards 옆(App.jsx)의 <ReportDownload />로 옮겼습니다.
+// 이 탭까지 와야만 다운로드할 수 있었던 문제를 해결하기 위함이에요.
+export default function RecommendationsTab({ result }) {
   const scenarioData = result.scenario_comparison.map((s) => ({
     name: s.scenario_name,
     예상세금: s.estimated_tax,
   }));
-
-  const handleDownload = async (format) => {
-    setDownloading(true);
-    try {
-      const blob = await exportReport({ ...requestPayload, format });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = format === "pdf" ? "세금지킴이_report.pdf" : "세금지킴이_report.txt";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-    } catch (err) {
-      alert("리포트 다운로드에 실패했습니다: " + err.message);
-    } finally {
-      setDownloading(false);
-    }
-  };
 
   return (
     <div className="tab-panel">
@@ -74,15 +53,6 @@ export default function RecommendationsTab({ result, requestPayload }) {
       </div>
 
       <p className="disclaimer">⚠️ {result.disclaimer}</p>
-
-      <div className="download-row">
-        <button className="btn-secondary" onClick={() => handleDownload("text")} disabled={downloading}>
-          📄 텍스트 리포트 다운로드
-        </button>
-        <button className="btn-secondary" onClick={() => handleDownload("pdf")} disabled={downloading}>
-          📑 PDF 리포트 다운로드
-        </button>
-      </div>
     </div>
   );
 }

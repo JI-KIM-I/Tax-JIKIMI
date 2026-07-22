@@ -2,10 +2,11 @@ import { useState } from "react";
 import ShieldIcon from "./components/ShieldIcon";
 import DiagnosisForm from "./components/DiagnosisForm";
 import SummaryCards from "./components/SummaryCards";
+import ReportSummary from "./components/ReportSummary";
+import ReportDownload from "./components/ReportDownload";
 import TabNav from "./components/TabNav";
 import FinancialIncomeTab from "./components/tabs/FinancialIncomeTab";
 import PensionCompareTab from "./components/tabs/PensionCompareTab";
-import PensionTimingTab from "./components/tabs/PensionTimingTab";
 import LimitUsageTab from "./components/tabs/LimitUsageTab";
 import RecommendationsTab from "./components/tabs/RecommendationsTab";
 import ChatWidget from "./components/ChatWidget";
@@ -27,9 +28,11 @@ export default function App() {
       setResult(data);
       setRequestPayload(payload);
       setActiveTab("financial");
+      return data;
     } catch (err) {
       const detail = err.response?.data?.detail || err.message;
       setError(`계산 중 오류가 발생했습니다: ${detail}`);
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -46,7 +49,7 @@ export default function App() {
       </header>
 
       <div className="app-body">
-        <aside className="app-sidebar">
+        <aside className="app-sidebar" id="diagnosis-form-anchor">
           <DiagnosisForm onSubmit={handleSubmit} loading={loading} />
         </aside>
 
@@ -62,23 +65,28 @@ export default function App() {
 
           {result && (
             <>
-              <p className="report-summary">{result.report_summary}</p>
+              <ReportSummary text={result.report_summary} />
               <SummaryCards result={result} />
+              <ReportDownload requestPayload={requestPayload} />
               <TabNav active={activeTab} onChange={setActiveTab} />
 
               {activeTab === "financial" && <FinancialIncomeTab result={result} />}
               {activeTab === "pension" && <PensionCompareTab result={result} />}
-              {activeTab === "timing" && <PensionTimingTab result={result} />}
               {activeTab === "limit" && <LimitUsageTab result={result} />}
-              {activeTab === "summary" && (
-                <RecommendationsTab result={result} requestPayload={requestPayload} />
-              )}
+              {activeTab === "summary" && <RecommendationsTab result={result} />}
             </>
           )}
         </main>
       </div>
 
-      <ChatWidget result={result} />
+      <ChatWidget
+        result={result}
+        requestPayload={requestPayload}
+        onRunDiagnosis={handleSubmit}
+        onOpenDiagnosisForm={() =>
+          document.getElementById("diagnosis-form-anchor")?.scrollIntoView({ behavior: "smooth", block: "start" })
+        }
+      />
     </div>
   );
 }

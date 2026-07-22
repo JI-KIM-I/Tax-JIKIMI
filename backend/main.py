@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import asdict, is_dataclass
 from decimal import Decimal
@@ -819,6 +820,31 @@ def api_search(body: ChatRequestBody):
     }
 
 
+# 세금과 무관한 인사말/잡담을 짧고 뚜렷한 패턴으로만 잡아냅니다 (오탐 방지를 위해 길이 제한 + 정확 매칭).
+_GREETING_RE = re.compile(
+    r"^\s*(안녕[!?~.\s]*(하세요|하십니까|)|하이|hi|hello|헬로|반가워요?|방가|ㅎㅇ|"
+    r"고마워요?|고맙습니다|감사합니다|감사해요|수고하세요|수고했어요|잘\s*지내(요|니|셨어요)?)\s*[!?~.]*\s*$",
+    re.IGNORECASE,
+)
+
+
+def _is_smalltalk(question: str) -> bool:
+    """세금 상담과 무관한 인사말인지 가볍게 판별합니다.
+    본문 내용을 억지로 채워 넣는 대신, RAG/LLM 호출 없이 바로 인사로 응답하기 위한 용도입니다."""
+    q = (question or "").strip()
+    if not q or len(q) > 12:
+        return False
+    return bool(_GREETING_RE.match(q))
+
+
+def _smalltalk_answer(question: str) -> str:
+    return (
+        "안녕하세요! 저는 절세지킴이 AI 챗봇이에요. "
+        "연금 수령, 금융소득종합과세, ISA·연금저축·IRP 절세 한도 같은 주제를 국세청 자료 기준으로 안내해드려요. "
+        '궁금한 걸 편하게 물어보세요. 예를 들면 "연금을 나눠 받으면 세금이 왜 줄어들어?" 같은 질문이 좋아요.'
+    )
+
+
 def _build_prompt(question: str, context: Optional[dict], docs: list[dict]) -> str:
     context_text = json.dumps(context or {}, ensure_ascii=False, indent=2)
     doc_text = "\n\n".join(
@@ -829,7 +855,9 @@ def _build_prompt(question: str, context: Optional[dict], docs: list[dict]) -> s
 당신은 '절세지킴이'의 RAG 기반 세금 상담 챗봇입니다.
 
 규칙:
-1. 반드시 [참고 문서]와 [현재 진단 결과]에 근거해서 답변하세요.
+0. 질문이 세금과 무관한 인사말이나 잡담이면, [참고 문서]나 [현재 진단 결과]를 억지로 끌어와 답하지 말고
+   자연스럽게 짧은 인사로 답하면서 어떤 걸 도와줄 수 있는지 안내하세요.
+1. 세금 관련 질문이라면 반드시 [참고 문서]와 [현재 진단 결과]에 근거해서 답변하세요.
 2. 근거가 부족하면 단정하지 말고 "입력값 기준 예상"이라고 말하세요.
 3. 세무사 확정 상담처럼 말하지 말고, 실제 세액은 달라질 수 있다고 안내하세요.
 4. 답변은 한국어로, 5060 사용자가 이해하기 쉽게 4~7문장으로 작성하세요.
@@ -876,6 +904,13 @@ def _fallback_chat_answer(question: str, context: Optional[dict], docs: list[dic
                 "다만 실제 세액은 연금계좌의 원천, 수령 요건, 연금수령한도 초과 여부에 따라 달라질 수 있습니다. "
                 "확인할 것: 실제 수령하려는 금액이 연금수령한도 안에 들어오는지 확인해 주세요."
             )
+        # 진단 결과가 없을 때도 문서 원문을 그대로 붙이지 않고, 같은 말투로 다시 풀어서 답합니다.
+        return (
+            "사적연금은 나이에 따라 낮아지는 세율(70세 미만 5%, 70~79세 4%, 80세 이상 3%)을 적용받기 때문에, "
+            "보통 일시금으로 한 번에 받는 것보다 나눠 받을 때 세금이 줄어드는 경우가 많습니다. "
+            "반대로 연금 외 수령으로 처리되면 기타소득세 15%가 적용될 수 있어요. "
+            "왼쪽 진단 폼에 정보를 입력해주시면 실제 금액 기준으로 일시금과 분할수령의 세금 차이를 계산해드릴 수 있어요."
+        )
 
     if "금융소득" in q or "종합과세" in q or "2천" in q:
         fin = fit.get("financial_income") or fit.get("financialIncome")
@@ -889,23 +924,49 @@ def _fallback_chat_answer(question: str, context: Optional[dict], docs: list[dic
                 "금융소득종합과세 여부는 먼저 이자소득과 배당소득 합계가 2천만 원을 초과하는지로 판단하고, "
                 "초과 후에는 다른 종합소득과 합산되어 세율이 달라질 수 있습니다."
             )
+        # 진단 결과가 없을 때도 같은 말투로 일반 규칙만 안내합니다 (문서 원문을 그대로 붙이면
+        # "~다"체 문어체와 나머지 "~습니다"체가 섞여 어색해집니다).
+        return (
+            "금융소득종합과세는 이자소득과 배당소득 등 금융소득의 합계액이 연 2천만 원을 초과할 때 적용될 수 있습니다. "
+            "2천만 원 이하라면 보통 금융회사가 원천징수한 세금으로 과세가 끝나고, 초과분이 있으면 다른 종합소득과 합산되어 세율이 달라질 수 있어요. "
+            "왼쪽 진단 폼을 채워주시면 실제 금융소득 기준으로 얼마나 초과되는지 계산해드릴 수 있어요."
+        )
 
     if "ISA" in q or "IRP" in q or "한도" in q or "연금저축" in q:
+        credit = limit.get("estimated_tax_credit")
+        if credit is not None:
+            return (
+                "절세 한도는 ISA, 연금저축, IRP 납입액을 기준으로 활용률을 계산합니다. "
+                f"현재 진단 기준 예상 세액공제액은 약 {_won(credit)}입니다. "
+                "연금저축과 IRP는 합산 한도를 초과하면 추가 납입분이 같은 방식으로 공제되지 않을 수 있으니, "
+                "먼저 올해 납입액과 남은 한도를 확인하는 것이 좋습니다. "
+                + ISA_POLICY_WARNING
+            )
         return (
             "절세 한도는 ISA, 연금저축, IRP 납입액을 기준으로 활용률을 계산합니다. "
-            f"현재 진단 기준 예상 세액공제액은 약 {_won(limit.get('estimated_tax_credit', 0))}입니다. "
             "연금저축과 IRP는 합산 한도를 초과하면 추가 납입분이 같은 방식으로 공제되지 않을 수 있으니, "
             "먼저 올해 납입액과 남은 한도를 확인하는 것이 좋습니다. "
+            "왼쪽 진단 폼을 채워주시면 실제 예상 세액공제액을 계산해드릴 수 있어요. "
             + ISA_POLICY_WARNING
         )
 
+    # 여기까지 왔다는 건 위 키워드 중 어디에도 안 걸렸다는 뜻입니다. 문서 원문을 그대로 잘라
+    # 문장 중간에 이어붙이면 문어체("~다")와 나머지 말투("~습니다")가 섞여 어색해지므로,
+    # 인용임을 알 수 있게 따옴표로 감싸서 붙입니다.
     first_doc = ""
     if docs:
-        first_doc = docs[0].get("content") or docs[0].get("text") or ""
+        first_doc = (docs[0].get("content") or docs[0].get("text") or "").strip()
+    if first_doc:
+        excerpt = first_doc[:160].strip()
+        ellipsis = "..." if len(first_doc) > 160 else ""
+        return (
+            "질문을 조금 더 구체적으로 해주시면 더 정확히 답변드릴 수 있을 것 같아요. "
+            f'참고로 관련 자료에는 "{excerpt}{ellipsis}"라고 안내되어 있어요. '
+            "실제 세액은 개인별 공제, 감면, 상품 조건에 따라 달라질 수 있습니다."
+        )
     return (
-        "관련 문서를 검색한 결과를 바탕으로 보면, 입력값 기준의 예상 계산으로 접근하는 것이 안전합니다. "
-        + (first_doc[:180] + " " if first_doc else "")
-        + "실제 세액은 개인별 공제, 감면, 상품 조건에 따라 달라질 수 있습니다."
+        "관련 자료를 찾지 못했어요. 질문을 조금 더 구체적으로 해주시면 도와드릴게요 "
+        '(예: "연금을 나눠 받으면 세금이 왜 줄어들어?", "ISA 한도가 얼마야?").'
     )
 
 
@@ -930,6 +991,16 @@ def _call_openai(prompt: str) -> Optional[str]:
 @app.post("/api/chat")
 def api_chat(body: ChatRequestBody):
     started = time.perf_counter()
+
+    # "안녕" 같은 인사말은 RAG 검색·LLM 호출 없이 바로 응답합니다.
+    # (그렇지 않으면 세금과 무관한 문서가 검색돼 엉뚱한 답이 만들어질 수 있습니다)
+    if _is_smalltalk(body.question):
+        answer = _smalltalk_answer(body.question)
+        latency = (time.perf_counter() - started) * 1000
+        log_meta = {"used_fallback": False, "smalltalk": True}
+        _log_api("/api/chat", _model_dump(body), latency, log_meta)
+        return {"answer": answer, "sources": [], "meta": log_meta}
+
     docs, meta = search_documents(body.question, top_k=body.top_k)
     prompt = _build_prompt(body.question, body.context, docs)
 

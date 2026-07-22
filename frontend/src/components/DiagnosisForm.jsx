@@ -1,6 +1,7 @@
 import { useState } from "react";
 
-const initialForm = {
+// ChatWidget이 채팅에서 추출한 정보를 진단 payload로 합칠 때 기본값으로 재사용합니다.
+export const initialForm = {
   age: 58,
   retirement_age: 65,
   total_income: 80000000,
@@ -61,21 +62,33 @@ export default function DiagnosisForm({ onSubmit, loading }) {
     const { name, type, value, checked } = e.target;
     setForm((prev) => ({
       ...prev,
-      [name]: type === "checkbox" ? checked : type === "number" ? Number(value) : value,
+      // 숫자칸을 전체 지우면 value가 ""가 되는데, 이걸 바로 Number("")=0으로 바꿔서 state에 넣으면
+      // 화면에 "0"이 남아있는 채로 다음 입력이 그 뒤에 이어져서 "05" 같은 값이 됩니다.
+      // 지워진 상태("")는 그대로 두고, 실제 숫자로 바꾸는 건 제출 시점(handleSubmit)에서 처리합니다.
+      [name]: type === "checkbox" ? checked : type === "number" ? (value === "" ? "" : Number(value)) : value,
     }));
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     const { annual_yield_rate_pct, ...rest } = form;
+    // 입력칸이 비어있는 채로 제출하면(값 "") 0으로 간주합니다.
+    const normalized = Object.fromEntries(
+      Object.entries(rest).map(([key, val]) => [key, val === "" ? 0 : val])
+    );
     onSubmit({
-      ...rest,
-      annual_yield_rate: annual_yield_rate_pct / 100,
+      ...normalized,
+      annual_yield_rate: (annual_yield_rate_pct === "" ? 0 : Number(annual_yield_rate_pct)) / 100,
     });
   };
 
   return (
     <form className="diagnosis-form" onSubmit={handleSubmit}>
+      {/* 예전엔 사이드바 전체가 하나로 스크롤되고 그 안에 버튼만 sticky를 걸었더니,
+          내부 계산이 꼬여서 버튼 밑으로 다른 입력칸이 비쳐 보이는 버그가 있었습니다.
+          지금은 입력칸 영역과 버튼 영역을 아예 분리해서(스크롤은 아래 영역에서만),
+          버튼은 항상 그 아래 고정된 자리에 별도로 놓이게 구조를 바꿨습니다. */}
+      <div className="diagnosis-form-fields">
       <fieldset>
         <legend>1. 기본 정보</legend>
         <NumberField
@@ -222,26 +235,20 @@ export default function DiagnosisForm({ onSubmit, loading }) {
         />
       </fieldset>
 
-      <fieldset>
-        <legend>5. 연금 수령 시작 시점 추천</legend>
-        <Field label="연금 수령 시작 시점 추천 받기" hint="켜두면 아래 나이 범위 안에서 세금이 가장 적은 시작 나이를 찾아드려요">
-          <input type="checkbox" name="recommend_pension_start" checked={form.recommend_pension_start} onChange={handleChange} />
-        </Field>
-        <NumberField
-          label="추천 탐색 최대 나이 (몇 살까지 계산해볼지)"
-          hint="예: 85로 두면 '연금 수령 예정 나이'부터 85세까지 한 살씩 계산해서 가장 세금이 적은 나이를 찾아드려요"
-          name="max_pension_start_age"
-          min={form.retirement_age}
-          max="100"
-          step={1}
-          value={form.max_pension_start_age}
-          onChange={handleChange}
-        />
-      </fieldset>
+      {/* 예전엔 여기에 "연금 수령 시작 시점 추천 받기" 체크박스 + 최대 나이 입력칸이 있었습니다.
+          그 결과를 보여주던 전용 탭을 없애고 챗봇 컨텍스트로만 넘기는 방향으로 바꾸면서,
+          사용자가 굳이 켜고 끄는 옵션일 필요가 없어져서 폼에서도 뺐습니다.
+          initialForm의 recommend_pension_start(true)·max_pension_start_age(85) 기본값 그대로
+          항상 계산해서 챗봇이 참고할 수 있게 합니다. */}
+      </div>
 
-      <button type="submit" className="btn-primary" disabled={loading}>
-        {loading ? "진단 중..." : "🔍 절세 진단 시작"}
-      </button>
+      {/* 입력칸이 18개나 되다 보니 이 버튼이 맨 아래에만 있으면 스크롤을 끝까지 내려야만 보였습니다.
+          위 .diagnosis-form-fields 안에서만 스크롤되고, 버튼은 그 바깥 고정된 자리에 항상 보입니다. */}
+      <div className="diagnosis-submit-bar">
+        <button type="submit" className="btn-primary" disabled={loading}>
+          {loading ? "진단 중..." : "🔍 절세 진단 시작"}
+        </button>
+      </div>
     </form>
   );
 }

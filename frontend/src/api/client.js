@@ -1,8 +1,9 @@
 import axios from "axios";
 
-// 백엔드(FastAPI) 서버 주소. uvicorn 기본 포트인 8000을 그대로 사용합니다.
-// 배포 시에는 실제 서버 주소로 바꿔주세요 (예: 환경변수로 분리).
-const BASE_URL = "http://localhost:8000";
+// 백엔드(FastAPI) 서버 주소. 로컬 개발할 땐 uvicorn 기본 포트(8000)를 그대로 쓰고,
+// 배포할 땐 프론트엔드 빌드 시 VITE_API_BASE_URL 환경변수로 실제 백엔드 주소를 넣어주세요.
+// 예: frontend/.env.production 파일에 VITE_API_BASE_URL=https://your-backend.onrender.com
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 const client = axios.create({
   baseURL: BASE_URL,

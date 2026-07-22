@@ -234,3 +234,6 @@ backend/rag/chroma_db/
 node_modules/
 frontend/node_modules/
 frontend/dist/
+
+# macOS
+.DS_Store

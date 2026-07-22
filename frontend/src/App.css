@@ -49,16 +49,21 @@
   background: var(--color-surface);
   border-right: 1px solid var(--color-border);
   padding: 24px;
-  max-height: calc(100vh - 73px);
-  overflow-y: auto;
+  /* max-height(auto 기반)이 아니라 height(고정값)를 써야, 안의 폼이 flex로
+     "입력칸 영역만 스크롤 + 버튼은 항상 고정"을 제대로 계산할 수 있습니다. */
+  height: calc(100vh - 73px);
+  overflow: hidden;
   position: sticky;
   top: 73px;
+  display: flex;
+  flex-direction: column;
 }
 
 @media (max-width: 900px) {
   .app-sidebar {
     position: static;
-    max-height: none;
+    height: auto;
+    overflow: visible;
     border-right: none;
     border-bottom: 1px solid var(--color-border);
   }
@@ -71,6 +76,32 @@
 /* ---------------------------------------------------------------------
    폼
 --------------------------------------------------------------------- */
+
+.diagnosis-form {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.diagnosis-form-fields {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  /* 스크롤바가 입력칸 텍스트를 가리지 않도록 살짝 여유를 둡니다 */
+  padding-right: 2px;
+  position: relative;
+}
+
+@media (max-width: 900px) {
+  .diagnosis-form {
+    height: auto;
+  }
+
+  .diagnosis-form-fields {
+    overflow-y: visible;
+  }
+}
 
 .diagnosis-form fieldset {
   border: none;
@@ -142,6 +173,18 @@
   background: #0e2422;
 }
 
+/* 폼이 길어서(입력칸 18개) 제출 버튼이 맨 아래에서만 보였던 문제 —
+   이제 .diagnosis-form-fields(위)만 스크롤되고, 이 버튼은 그 바깥 flex 자리에 그냥
+   고정으로 놓입니다. sticky나 음수 마진 트릭이 필요 없어서, 예전처럼 다른 입력칸이
+   버튼 아래로 비쳐 보이는 문제 자체가 생길 수 없는 구조입니다. */
+/* 그림자를 넣어봤더니 흐릿한 번짐 때문에 버튼 뒤에 정체 모를 흰 박스가 떠 있는 것처럼 보인다는
+   피드백이 있어서, 장식 없이 사이드바 배경에 그냥 자연스럽게 이어지도록 심플하게 바꿨습니다. */
+.diagnosis-submit-bar {
+  flex-shrink: 0;
+  margin-top: 20px;
+  padding-top: 16px;
+}
+
 .btn-primary:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -189,12 +232,21 @@
 }
 
 .report-summary {
-  background: #eef4f1;
+  /* 원래 배경(#eef4f1)이 거의 흰색에 가까워서 잘 안 띈다는 피드백으로, 초록 톤을 아주 살짝 더 진하게 */
+  background: #e2ebe6;
   border-left: 3px solid var(--color-guard-green);
-  padding: 14px 18px;
+  padding: 16px 20px;
   border-radius: 6px;
   font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--color-ink);
   margin-bottom: 20px;
+}
+
+.report-summary-figure {
+  font-family: var(--font-mono);
+  color: var(--color-guard-green);
+  font-weight: 700;
 }
 
 .summary-row {
@@ -412,10 +464,22 @@
   margin: 16px 0;
 }
 
-.download-row {
+/* SummaryCards 바로 아래, 탭과 무관하게 항상 보이는 위치의 다운로드 버튼 두 개.
+   위 SummaryCards(.summary-row)의 gap:16px, margin-bottom:24px 리듬에 맞춰서
+   같은 화면 흐름처럼 보이게 정렬했습니다. */
+.report-download {
   display: flex;
-  gap: 10px;
+  gap: 16px;
   flex-wrap: wrap;
+  margin: 0 0 24px;
+}
+
+/* 버튼 두 개 글자 길이가 달라서 왼쪽으로 쏠린 채 오른쪽에 빈 공간만 남아 위 SummaryCards
+   그리드(3등분)랑 비교하면 정렬이 어색해 보였습니다. 폭을 균등하게 채워서 리듬을 맞춥니다. */
+.report-download .btn-secondary {
+  flex: 1 1 0;
+  min-width: 160px;
+  text-align: center;
 }
 
 /* ---------------------------------------------------------------------
@@ -494,6 +558,22 @@
   font-style: italic;
 }
 
+/* 답변이 완성되면 한 글자씩 타이핑되지 않고, 완성된 상태로 한 번에 스르륵 나타납니다 */
+.chat-bubble--enter {
+  animation: chat-bubble-fade-in 0.35s ease;
+}
+
+@keyframes chat-bubble-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .chat-sources {
   margin-top: 8px;
   font-size: 0.78rem;
@@ -544,23 +624,41 @@
 .chat-input-row {
   display: flex;
   gap: 8px;
-  align-items: flex-end;
+  /* flex-end로 두면 2줄짜리 textarea보다 버튼이 짧아서 위쪽에 어중간한 틈이 생겼습니다.
+     stretch로 바꿔 버튼 높이가 textarea와 항상 맞도록 합니다. */
+  align-items: stretch;
 }
 
 .chat-input-row textarea {
   flex: 1;
+  min-width: 0;
   resize: none;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   padding: 10px 12px;
   font-family: var(--font-body);
   font-size: 0.88rem;
+  /* 짧은 placeholder라도 한글/기호가 섞이면 어색하게 끊길 수 있어, 단어 단위로만 줄바꿈합니다 */
+  word-break: keep-all;
+}
+
+/* 버튼과 나란한 줄 안이 아니라, 입력 줄 전체 아래에 별도 캡션으로 둡니다.
+   (textarea 옆에 붙였더니 전송 버튼과 세로 정렬이 어긋나 보였습니다) */
+.chat-input-hint {
+  margin: 4px 0 0;
+  font-size: 0.68rem;
+  color: var(--color-ink-soft);
+  padding-left: 2px;
+  flex-shrink: 0;
 }
 
 .chat-send-btn {
   width: auto;
-  padding: 10px 20px;
+  padding: 0 20px;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* ---------------------------------------------------------------------
@@ -571,15 +669,17 @@
   position: fixed;
   bottom: 24px;
   right: 24px;
-  width: 56px;
   height: 56px;
-  border-radius: 50%;
+  width: 56px;
+  /* 999px면 정사각형일 땐 완전한 원, labeled 상태처럼 폭이 넓어지면 알약(pill) 모양이 됩니다 */
+  border-radius: 999px;
   background: var(--color-ink);
   border: none;
   box-shadow: 0 4px 16px rgba(22, 48, 46, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   cursor: pointer;
   font-size: 1.2rem;
   color: #fff;
@@ -587,17 +687,33 @@
   transition: transform 0.15s ease;
 }
 
+/* 닫혀있을 땐 아이콘만으로는 챗봇인지 알아보기 어렵다는 피드백이 있어서, "AI 챗봇" 글자를
+   상시로 붙였습니다. 원래 크기(56x56 원)에 글자까지 욱여넣어서 깨져 보였던 걸,
+   이 상태에서만 폭을 넓혀 알약 모양으로 바꿔서 해결했습니다. */
+.chat-fab--labeled {
+  width: auto;
+  padding: 0 20px 0 16px;
+}
+
+.chat-fab-label {
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1;
+}
+
 .chat-fab:hover {
-  transform: scale(1.06);
+  transform: scale(1.05);
 }
 
 .chat-widget-panel {
   position: fixed;
   bottom: 92px;
   right: 24px;
-  width: 360px;
+  width: 404px;
   max-width: calc(100vw - 48px);
-  max-height: min(600px, calc(100vh - 140px));
+  height: min(600px, calc(100vh - 140px));
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 14px;
@@ -606,8 +722,9 @@
   z-index: 99;
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  overflow-x: hidden;
+  /* 패널 전체는 스크롤되지 않습니다 — 헤더/버튼이 스크롤을 따라 같이 밀려 올라가던 문제.
+     스크롤은 안의 .chat-window(대화 목록)에서만 일어나고, 나머지(헤더·안내문·입력창)는 고정됩니다. */
+  overflow: hidden;
 }
 
 .chat-widget-header {
@@ -636,6 +753,28 @@
   padding: 4px;
 }
 
+.chat-widget-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.chat-widget-icon-btn {
+  background: none;
+  border: none;
+  color: var(--color-ink-soft);
+  font-size: 1.15rem;
+  cursor: pointer;
+  padding: 5px 7px;
+  border-radius: 6px;
+  line-height: 1;
+}
+
+.chat-widget-icon-btn:hover {
+  background: #eef4f1;
+  color: var(--color-ink);
+}
+
 .chat-widget-subtitle {
   font-size: 0.78rem;
   color: var(--color-ink-soft);
@@ -644,9 +783,14 @@
 }
 
 .chat-window--widget {
+  /* 패널 높이가 고정(overflow: hidden)이라, 대화 목록이 남는 세로 공간을 전부 채우고
+     그 안에서만 스크롤되게 합니다.
+     min-height를 큰 값으로 두면, 참고 카드·확인 카드 등이 한꺼번에 늘어났을 때 대화 목록이
+     충분히 줄어들지 못해 패널 전체가 넘치고 그 결과 입력창이 잘려 안 보이는 문제가 있었습니다.
+     그래서 min-height: 0으로 두고, 정말 필요할 때는 대화 목록이 작아지더라도
+     헤더·입력창이 항상 보이는 쪽을 우선합니다. */
   flex: 1 1 auto;
-  min-height: 160px;
-  max-height: 280px;
+  min-height: 0;
 }
 
 .chat-widget-panel .chat-error {
@@ -670,5 +814,288 @@
   .chat-fab {
     right: 16px;
     bottom: 16px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   챗봇 전체화면 모드
+--------------------------------------------------------------------- */
+
+.chat-widget-panel--fullscreen {
+  top: 24px;
+  left: 24px;
+  right: 24px;
+  bottom: 24px;
+  width: auto;
+  /* 기본 .chat-widget-panel에 고정 height가 있어서, top/right/bottom/left를 다 지정해도
+     그 height 값이 우선 적용돼 화면을 꽉 채우지 못하던 버그가 있었습니다.
+     height를 auto로 풀어줘야 네 방향 inset대로 전체 화면을 채웁니다. */
+  height: auto;
+  max-width: none;
+  max-height: none;
+  border-radius: 16px;
+}
+
+.chat-widget-panel--fullscreen .chat-window--widget {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+@media (max-width: 480px) {
+  .chat-widget-panel--fullscreen {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   진단 결과 참고 카드
+--------------------------------------------------------------------- */
+
+.chat-reference-card {
+  flex-shrink: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: #f5f8f6;
+}
+
+.chat-reference-toggle {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: none;
+  border: none;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.chat-reference-toggle-caret {
+  color: var(--color-ink-soft);
+  font-weight: 400;
+  padding: 0;
+}
+
+.chat-reference-card ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+}
+
+.chat-reference-card li {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 0.74rem;
+  color: var(--color-ink-soft);
+}
+
+.chat-reference-card li strong {
+  color: var(--color-ink);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------
+   진단 폼 안내(넛지) 배너
+--------------------------------------------------------------------- */
+
+.chat-nudge {
+  flex-shrink: 0;
+  border: 1px solid var(--color-guard-green);
+  background: #eef7f0;
+  border-radius: 10px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.chat-nudge p {
+  margin: 0 0 6px;
+  font-size: 0.78rem;
+  color: var(--color-ink);
+}
+
+.chat-nudge-btn {
+  background: var(--color-guard-green);
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+/* ---------------------------------------------------------------------
+   대화에서 추출한 정보 확인 카드 (진단 자동 실행 전 확인)
+--------------------------------------------------------------------- */
+
+.chat-confirm-profile {
+  flex-shrink: 0;
+  border: 1px solid var(--color-guard-green);
+  background: #eef7f0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.chat-confirm-profile__title {
+  margin: 0 0 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--color-ink);
+}
+
+.chat-confirm-profile ul {
+  margin: 0 0 6px;
+  padding-left: 18px;
+}
+
+.chat-confirm-profile li {
+  font-size: 0.78rem;
+  color: var(--color-ink);
+  line-height: 1.5;
+}
+
+.chat-confirm-profile__note {
+  margin: 0 0 8px;
+  font-size: 0.72rem;
+  color: var(--color-ink-soft);
+}
+
+.chat-confirm-profile__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chat-confirm-btn {
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  color: var(--color-ink);
+}
+
+.chat-confirm-btn--primary {
+  background: var(--color-guard-green);
+  border-color: var(--color-guard-green);
+  color: #fff;
+  font-weight: 600;
+}
+
+.chat-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------------
+   출처 칩(펼쳐보기)
+--------------------------------------------------------------------- */
+
+.chat-source-list {
+  margin-top: 8px;
+}
+
+.chat-source-list-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--color-ink-soft);
+  margin-bottom: 4px;
+}
+
+.chat-source-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chat-source-chip {
+  background: #eef4f1;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.72rem;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+}
+
+.chat-source-chip--active {
+  background: var(--color-guard-green);
+  border-color: var(--color-guard-green);
+  color: #fff;
+}
+
+.chat-source-detail {
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #fafbfa;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  font-size: 0.76rem;
+  color: var(--color-ink-soft);
+}
+
+.chat-source-detail strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--color-ink);
+}
+
+/* ---------------------------------------------------------------------
+   챗봇 첫 방문 안내 말풍선 (FAB 옆, 한 번만 노출)
+--------------------------------------------------------------------- */
+
+.chat-intro-bubble {
+  position: fixed;
+  bottom: 92px;
+  right: 24px;
+  max-width: 200px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  border-bottom-right-radius: 4px;
+  padding: 10px 14px;
+  box-shadow: 0 6px 20px rgba(22, 48, 46, 0.16);
+  z-index: 101;
+  cursor: pointer;
+  animation: chat-bubble-fade-in 0.3s ease;
+}
+
+.chat-intro-bubble p {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  padding-right: 14px;
+}
+
+.chat-intro-bubble__close {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  background: none;
+  border: none;
+  color: var(--color-ink-soft);
+  font-size: 0.7rem;
+  cursor: pointer;
+  padding: 2px;
+  line-height: 1;
+}
+
+@media (max-width: 480px) {
+  .chat-intro-bubble {
+    right: 16px;
+    bottom: 84px;
   }
 }
