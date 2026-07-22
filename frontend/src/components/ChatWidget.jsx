@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import { sendChatMessage } from "../api/client";
 import ShieldIcon from "./ShieldIcon";
 import { won, pct } from "../utils/format";
+import { friendlyDiagnosisError } from "../utils/errors";
 import { initialForm as diagnosisDefaults } from "./DiagnosisForm";
 import {
   extractProfileFromText,
@@ -350,7 +351,9 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
       ]);
       await proceedWithChat(question, diagnosisData);
     } catch (err) {
-      const detail = err.response?.data?.detail || err.message || "진단 계산 중 문제가 발생했어요.";
+      // 백엔드 원본 에러(영어 필드명 등)를 그대로 보여주지 않고 자연스러운 안내로 바꿉니다.
+      const rawDetail = err.response?.data?.detail;
+      const detail = rawDetail ? friendlyDiagnosisError(rawDetail) : "진단 계산 중 문제가 발생했어요.";
       setError(detail);
       setLoading(false);
     }

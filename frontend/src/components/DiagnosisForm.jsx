@@ -69,9 +69,13 @@ function NumberField({ label, hint, name, value, onChange, unit = "원" }) {
 
 export default function DiagnosisForm({ onSubmit, loading }) {
   const [form, setForm] = useState(initialForm);
+  // 백엔드까지 안 보내도 미리 알 수 있는 입력 오류(나이 관계 등)는 여기서 바로 잡아서
+  // "retirement_age must be..." 같은 원본 에러 메시지가 아예 뜰 일이 없게 합니다.
+  const [validationError, setValidationError] = useState(null);
 
   const handleChange = (e) => {
     const { name, type, value, checked } = e.target;
+    setValidationError(null);
     setForm((prev) => ({
       ...prev,
       // 숫자칸을 전체 지우면 value가 ""가 되는데, 이걸 바로 Number("")=0으로 바꿔서 state에 넣으면
@@ -88,6 +92,14 @@ export default function DiagnosisForm({ onSubmit, loading }) {
     const normalized = Object.fromEntries(
       Object.entries(rest).map(([key, val]) => [key, val === "" ? 0 : val])
     );
+
+    // 백엔드에 물어보나마나인 흔한 입력 실수는 여기서 먼저 걸러서, 바로 안내하고 API 호출 자체를 막습니다.
+    if (normalized.retirement_age < normalized.age) {
+      setValidationError("연금 수령 예정 나이는 현재 나이보다 같거나 커야 해요. 나이를 다시 확인해주세요.");
+      return;
+    }
+
+    setValidationError(null);
     onSubmit({
       ...normalized,
       annual_yield_rate: (annual_yield_rate_pct === "" ? 0 : Number(annual_yield_rate_pct)) / 100,
@@ -253,6 +265,7 @@ export default function DiagnosisForm({ onSubmit, loading }) {
       {/* 입력칸이 18개나 되다 보니 이 버튼이 맨 아래에만 있으면 스크롤을 끝까지 내려야만 보였습니다.
           위 .diagnosis-form-fields 안에서만 스크롤되고, 버튼은 그 바깥 고정된 자리에 항상 보입니다. */}
       <div className="diagnosis-submit-bar">
+        {validationError && <p className="diagnosis-validation-error">{validationError}</p>}
         <button type="submit" className="btn-primary" disabled={loading}>
           {loading ? "진단 중..." : "🔍 절세 진단 시작"}
         </button>

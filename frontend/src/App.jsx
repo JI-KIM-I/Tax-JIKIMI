@@ -11,6 +11,7 @@ import LimitUsageTab from "./components/tabs/LimitUsageTab";
 import RecommendationsTab from "./components/tabs/RecommendationsTab";
 import ChatWidget from "./components/ChatWidget";
 import { runDiagnosis } from "./api/client";
+import { friendlyDiagnosisError } from "./utils/errors";
 import "./App.css";
 
 export default function App() {
@@ -30,8 +31,10 @@ export default function App() {
       setActiveTab("financial");
       return data;
     } catch (err) {
-      const detail = err.response?.data?.detail || err.message;
-      setError(`계산 중 오류가 발생했습니다: ${detail}`);
+      // 백엔드가 던지는 원본 에러(영어 필드명 등)를 그대로 보여주면 당황스러워서,
+      // 자연스러운 한국어 안내 문구로 바꿔서 보여줍니다.
+      const detail = err.response?.data?.detail;
+      setError(detail ? friendlyDiagnosisError(detail) : "계산 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
       throw err;
     } finally {
       setLoading(false);

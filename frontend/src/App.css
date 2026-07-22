@@ -144,6 +144,10 @@
   font-family: var(--font-mono);
   background: #fff;
   color: var(--color-ink);
+  /* select는 네이티브로 내용 글자 길이에 맞춰 폭이 좁아지는 경향이 있어서, 다른 입력칸과
+     폭을 맞추려면 명시적으로 100%를 줘야 합니다 */
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .field input[type="checkbox"] {
@@ -183,6 +187,18 @@
   flex-shrink: 0;
   margin-top: 20px;
   padding-top: 16px;
+}
+
+/* 백엔드까지 안 가고 미리 걸러낸 입력 오류(나이 관계 등)를 버튼 바로 위에 보여줍니다 */
+.diagnosis-validation-error {
+  background: #fbeceA;
+  color: var(--color-alert);
+  border: 1px solid var(--color-alert);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  font-size: 0.82rem;
+  line-height: 1.5;
 }
 
 .btn-primary:disabled {
