@@ -11,7 +11,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -41,6 +41,27 @@ from taxguard_calculation_logic import (
 )
 from rag.retriever import search_documents
 from dotenv import load_dotenv
+
+from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
+
+from auth import (
+    create_access_token,
+    get_current_user,
+    get_optional_user,
+    hash_password,
+    verify_password,
+)
+from db import (
+    chat_messages,
+    diagnosis_records,
+    init_db_indexes,
+    now_utc,
+    reports,
+    serialize_doc,
+    user_profiles,
+    users,
+)
 
 load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
@@ -140,6 +161,13 @@ app = FastAPI(
     version="1.0.0",
     default_response_class=UTF8JSONResponse,
 )
+
+
+@app.on_event("startup")
+def startup_event():
+    # MongoDB 인덱스 생성. 이미 있으면 그대로 재사용됩니다.
+    init_db_indexes()
+
 
 cors_origins = os.getenv(
     "CORS_ORIGINS",
@@ -245,6 +273,30 @@ class ChatRequestBody(BaseModel):
         return q
 
 
+class SignupRequestBody(BaseModel):
+    email: str
+    password: str
+    name: str = ""
+    nickname: str = ""
+
+
+class LoginRequestBody(BaseModel):
+    email: str
+    password: str
+
+
+class UserProfileRequestBody(BaseModel):
+    age: int = 45
+    retirement_age: int = 60
+    total_income: int = 80_000_000
+    interest_income: int = 0
+    dividend_income: int = 0
+    pension_savings_balance: int = 0
+    irp_balance: int = 0
+    expected_pension_amount: int = 0
+    tax_year: int = 2026
+
+
 # -----------------------------------------------------------------------------
 # Health
 # -----------------------------------------------------------------------------
@@ -252,6 +304,115 @@ class ChatRequestBody(BaseModel):
 @app.get("/")
 def health_check():
     return {"status": "ok", "service": "절세지킴이 API"}
+
+
+# -----------------------------------------------------------------------------
+# 회원가입 · 로그인 · 사용자 프로필
+# -----------------------------------------------------------------------------
+
+@app.post("/api/auth/signup")
+def api_signup(body: SignupRequestBody):
+    email = body.email.strip().lower()
+    nickname = body.nickname.strip()
+
+    if not email:
+        raise HTTPException(status_code=400, detail="이메일을 입력해 주세요.")
+    if len(body.password) < 6:
+        raise HTTPException(status_code=400, detail="비밀번호는 6자 이상이어야 합니다.")
+
+    doc = {
+        "email": email,
+        "password_hash": hash_password(body.password),
+        "name": body.name.strip(),
+        "created_at": now_utc(),
+        "updated_at": now_utc(),
+    }
+    if nickname:
+        doc["nickname"] = nickname
+
+    try:
+        result = users.insert_one(doc)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="이미 가입된 이메일 또는 닉네임입니다.")
+
+    user_id = str(result.inserted_id)
+    token = create_access_token(user_id, email)
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "_id": user_id,
+            "email": email,
+            "name": doc["name"],
+            "nickname": doc.get("nickname", ""),
+        },
+    }
+
+
+@app.post("/api/auth/login")
+def api_login(body: LoginRequestBody):
+    email = body.email.strip().lower()
+    user = users.find_one({"email": email})
+
+    if not user or not verify_password(body.password, user.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="이메일 또는 비밀번호가 올바르지 않습니다.")
+
+    token = create_access_token(str(user["_id"]), user["email"])
+
+    safe_user = serialize_doc(user)
+    safe_user.pop("password_hash", None)
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": safe_user,
+    }
+
+
+@app.get("/api/me")
+def api_me(current_user=Depends(get_current_user)):
+    return current_user
+
+
+@app.get("/api/profile")
+def api_get_profile(current_user=Depends(get_current_user)):
+    profile = user_profiles.find_one({"user_id": current_user["_id"]})
+
+    if not profile:
+        return {
+            "user_id": current_user["_id"],
+            "age": 45,
+            "retirement_age": 60,
+            "total_income": 0,
+            "interest_income": 0,
+            "dividend_income": 0,
+            "pension_savings_balance": 0,
+            "irp_balance": 0,
+            "expected_pension_amount": 0,
+            "tax_year": 2026,
+        }
+
+    return serialize_doc(profile)
+
+
+@app.put("/api/profile")
+def api_update_profile(
+    body: UserProfileRequestBody,
+    current_user=Depends(get_current_user),
+):
+    data = _model_dump(body)
+    data["user_id"] = current_user["_id"]
+    data["updated_at"] = now_utc()
+
+    user_profiles.update_one(
+        {"user_id": current_user["_id"]},
+        {"$set": data, "$setOnInsert": {"created_at": now_utc()}},
+        upsert=True,
+    )
+
+    profile = user_profiles.find_one({"user_id": current_user["_id"]})
+    return serialize_doc(profile)
 
 
 # -----------------------------------------------------------------------------
@@ -320,6 +481,57 @@ def api_scenario_comparison(body: DiagnosisRequestBody):
             "report_summary": result.report_summary,
         }
     )
+
+
+@app.post("/api/diagnosis/save")
+def api_save_diagnosis(
+    body: DiagnosisRequestBody,
+    current_user=Depends(get_current_user),
+):
+    result = _run(diagnose, body.to_dataclass())
+    payload = _to_jsonable(result)
+
+    doc = {
+        "user_id": current_user["_id"],
+        "input": _model_dump(body),
+        "result": payload,
+        "created_at": now_utc(),
+    }
+
+    inserted = diagnosis_records.insert_one(doc)
+
+    return {
+        "diagnosis_id": str(inserted.inserted_id),
+        "result": jsonable_encoder(payload),
+    }
+
+
+@app.get("/api/diagnoses")
+def api_list_diagnoses(current_user=Depends(get_current_user)):
+    cursor = (
+        diagnosis_records.find({"user_id": current_user["_id"]})
+        .sort("created_at", -1)
+        .limit(20)
+    )
+    return [serialize_doc(doc) for doc in cursor]
+
+
+@app.get("/api/diagnoses/{diagnosis_id}")
+def api_get_diagnosis(
+    diagnosis_id: str,
+    current_user=Depends(get_current_user),
+):
+    try:
+        oid = ObjectId(diagnosis_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="진단 기록 ID 형식이 올바르지 않습니다.")
+
+    doc = diagnosis_records.find_one({"_id": oid, "user_id": current_user["_id"]})
+
+    if not doc:
+        raise HTTPException(status_code=404, detail="진단 기록을 찾을 수 없습니다.")
+
+    return serialize_doc(doc)
 
 
 # -----------------------------------------------------------------------------
@@ -783,9 +995,25 @@ def _build_detailed_report_pdf_v2(result) -> BytesIO:
     return buffer
 
 @app.post("/api/report/export")
-def api_report_export(body: ReportExportRequestBody):
+def api_report_export(
+    body: ReportExportRequestBody,
+    current_user=Depends(get_optional_user),
+):
     result = _run(diagnose, body.to_dataclass())
     fmt = (body.format or "pdf").lower().strip()
+
+    if current_user:
+        try:
+            reports.insert_one(
+                {
+                    "user_id": current_user["_id"],
+                    "format": fmt,
+                    "input": _model_dump(body),
+                    "created_at": now_utc(),
+                }
+            )
+        except Exception:
+            logger.exception("report save failed")
 
     if fmt == "text" or fmt == "txt":
         text = _build_report_text(result)
@@ -813,6 +1041,16 @@ def api_report_export(body: ReportExportRequestBody):
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=taxguard_report.pdf"},
     )
+
+
+@app.get("/api/reports")
+def api_list_reports(current_user=Depends(get_current_user)):
+    cursor = (
+        reports.find({"user_id": current_user["_id"]})
+        .sort("created_at", -1)
+        .limit(20)
+    )
+    return [serialize_doc(doc) for doc in cursor]
 
 
 # -----------------------------------------------------------------------------
@@ -1001,8 +1239,34 @@ def _call_openai(prompt: str) -> Optional[str]:
         logger.exception("OpenAI API failed")
         return None
 
+
+def _save_chat_history(
+    current_user: Optional[dict],
+    question: str,
+    answer: str,
+    docs: list[dict],
+    meta: dict,
+) -> None:
+    if not current_user:
+        return
+
+    try:
+        chat_messages.insert_one(
+            {
+                "user_id": current_user["_id"],
+                "question": question,
+                "answer": answer,
+                "sources": docs,
+                "meta": meta,
+                "created_at": now_utc(),
+            }
+        )
+    except Exception:
+        logger.exception("chat message save failed")
+
+
 @app.post("/api/chat")
-def api_chat(body: ChatRequestBody):
+def api_chat(body: ChatRequestBody, current_user=Depends(get_optional_user)):
     started = time.perf_counter()
 
     # "안녕" 같은 인사말은 RAG 검색·LLM 호출 없이 바로 응답합니다.
@@ -1012,6 +1276,7 @@ def api_chat(body: ChatRequestBody):
         latency = (time.perf_counter() - started) * 1000
         log_meta = {"used_fallback": False, "smalltalk": True}
         _log_api("/api/chat", _model_dump(body), latency, log_meta)
+        _save_chat_history(current_user, body.question, answer, [], log_meta)
         return {"answer": answer, "sources": [], "meta": log_meta}
 
     docs, meta = search_documents(body.question, top_k=body.top_k)
@@ -1030,6 +1295,7 @@ def api_chat(body: ChatRequestBody):
     latency = (time.perf_counter() - started) * 1000
     log_meta = {**meta, "used_fallback": used_fallback}
     _log_api("/api/chat", _model_dump(body), latency, log_meta)
+    _save_chat_history(current_user, body.question, answer, docs, log_meta)
 
     return {
         "answer": answer,
@@ -1046,3 +1312,13 @@ def api_chat(body: ChatRequestBody):
         ],
         "meta": log_meta,
     }
+
+
+@app.get("/api/chats")
+def api_list_chats(current_user=Depends(get_current_user)):
+    cursor = (
+        chat_messages.find({"user_id": current_user["_id"]})
+        .sort("created_at", -1)
+        .limit(50)
+    )
+    return [serialize_doc(doc) for doc in cursor]
