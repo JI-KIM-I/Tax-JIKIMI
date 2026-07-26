@@ -68,6 +68,25 @@ function NumberField({ label, hint, name, value, onChange, unit = "원" }) {
   );
 }
 
+// 백엔드가 거절할 게 뻔한(혹은 값 자체가 말이 안 되는) 입력들을 API 호출 전에 미리 걸러냅니다.
+// 텍스트 입력으로 바뀌면서 예전에 <input type="number" min max>가 해주던 범위 제한이 없어졌는데,
+// 그걸 여기서 다시 챙기는 것도 겸합니다. 문제가 있으면 안내 문구를, 없으면 null을 돌려줍니다.
+function validateDiagnosisForm(normalized) {
+  if (normalized.age < 19 || normalized.age > 100) {
+    return "현재 나이는 19세부터 100세 사이로 입력해주세요.";
+  }
+  if (normalized.retirement_age < 19 || normalized.retirement_age > 100) {
+    return "연금 수령 예정 나이는 19세부터 100세 사이로 입력해주세요.";
+  }
+  if (normalized.retirement_age < normalized.age) {
+    return "연금 수령 예정 나이는 현재 나이보다 같거나 커야 해요. 나이를 다시 확인해주세요.";
+  }
+  if (normalized.pension_split_years <= 0) {
+    return "연금 분할 수령 기간은 1년 이상이어야 해요.";
+  }
+  return null;
+}
+
 export default function DiagnosisForm({ onSubmit, loading }) {
   const [form, setForm] = useState(initialForm);
   // 백엔드까지 안 보내도 미리 알 수 있는 입력 오류(나이 관계 등)는 여기서 바로 잡아서
@@ -95,8 +114,9 @@ export default function DiagnosisForm({ onSubmit, loading }) {
     );
 
     // 백엔드에 물어보나마나인 흔한 입력 실수는 여기서 먼저 걸러서, 바로 안내하고 API 호출 자체를 막습니다.
-    if (normalized.retirement_age < normalized.age) {
-      setValidationError("연금 수령 예정 나이는 현재 나이보다 같거나 커야 해요. 나이를 다시 확인해주세요.");
+    const validationMessage = validateDiagnosisForm(normalized);
+    if (validationMessage) {
+      setValidationError(validationMessage);
       return;
     }
 
