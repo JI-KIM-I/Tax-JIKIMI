@@ -66,7 +66,7 @@ export default function App() {
       // 백엔드가 던지는 원본 에러(영어 필드명 등)를 그대로 보여주면 당황스러워서,
       // 자연스러운 한국어 안내 문구로 바꿔서 보여줍니다.
       const detail = err.response?.data?.detail;
-      setError(detail ? friendlyDiagnosisError(detail) : "계산 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+      setError(detail ? friendlyDiagnosisError(detail) : "계산 중 오류가 발생했습니다. 잠시 후 다시 시도해 주시기 바랍니다.");
       throw err;
     } finally {
       setLoading(false);
@@ -114,7 +114,7 @@ export default function App() {
     setSaveMessage(null);
     try {
       await saveDiagnosis({ ...requestPayload, label }, auth.token);
-      setSaveMessage(`"${label}"(으)로 저장했어요.`);
+      setSaveMessage(`"${label}"(으)로 저장했습니다.`);
       setSaveMessageType("success");
       setSavePromptOpen(false);
       setSaveLabel("");
@@ -122,7 +122,7 @@ export default function App() {
       setDuplicateCandidate(null);
     } catch (err) {
       const detail = err.response?.data?.detail;
-      setSaveMessage(typeof detail === "string" ? detail : "저장 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.");
+      setSaveMessage(typeof detail === "string" ? detail : "저장 중 문제가 발생했습니다. 잠시 후 다시 시도해 주시기 바랍니다.");
       setSaveMessageType("error");
     } finally {
       setSaving(false);
@@ -132,7 +132,7 @@ export default function App() {
   const handleSaveDiagnosis = async () => {
     const label = saveLabel.trim();
     if (!label) {
-      setNameError("진단 기록 이름을 입력해주세요.");
+      setNameError("진단 기록 이름을 입력해 주시기 바랍니다.");
       return;
     }
     setNameError(null);
@@ -209,7 +209,16 @@ export default function App() {
           {!result && !error && (
             <div className="empty-state">
               <ShieldIcon size={48} />
-              <p>왼쪽 폼에 정보를 입력하고 <strong>"절세 진단 시작"</strong> 버튼을 눌러주세요.</p>
+              <h2 className="empty-state-title">세금지킴이는 이런 서비스입니다</h2>
+              <p className="empty-state-text">
+                은퇴를 앞둔 5060세대가 국민연금·개인연금·IRP·ISA 등을 어떻게 운용해야 금융소득종합과세와
+                세금 부담을 줄일 수 있는지 미리 점검해 볼 수 있도록 돕는 AI 절세 진단 서비스입니다.
+              </p>
+              <p className="empty-state-text">
+                왼쪽 폼에 현재 나이, 소득, 보유 자산 등을 입력하고 <strong>"절세 진단 시작"</strong> 버튼을
+                눌러 주시기 바랍니다. 진단 후에는 우측 하단 AI 챗봇을 통해 궁금한 점을 자유롭게 문의하실 수
+                있습니다.
+              </p>
             </div>
           )}
 
@@ -225,7 +234,7 @@ export default function App() {
                   </button>
                 )}
                 {!auth?.token && (
-                  <span className="report-actions-hint">로그인하면 이 진단을 저장하고 나중에 다시 볼 수 있어요.</span>
+                  <span className="report-actions-hint">로그인하면 이 진단을 저장하고 나중에 다시 보실 수 있습니다.</span>
                 )}
               </div>
 
@@ -250,7 +259,7 @@ export default function App() {
                     />
                     <div className="save-diagnosis-form-actions">
                       <button type="submit" className="btn-primary" disabled={saving}>
-                        {saving ? "저장 중..." : "저장"}
+                        {saving ? "저장 중입니다..." : "저장"}
                       </button>
                       <button type="button" className="btn-secondary" onClick={closeSavePrompt} disabled={saving}>
                         취소
@@ -264,7 +273,7 @@ export default function App() {
               {duplicateCandidate && (
                 <div className="save-duplicate-confirm">
                   <p>
-                    "{duplicateCandidate.label}"(이)라는 이름으로 이미 똑같은 값이 저장돼 있어요. 어떻게 할까요?
+                    "{duplicateCandidate.label}"(이)라는 이름으로 이미 동일한 값이 저장되어 있습니다. 어떻게 하시겠습니까?
                   </p>
                   <div className="save-duplicate-actions">
                     <button

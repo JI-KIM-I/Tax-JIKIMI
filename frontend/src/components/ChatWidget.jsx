@@ -36,7 +36,7 @@ function FullscreenIcon({ active }) {
 
 const GREETING = {
   role: "assistant",
-  text: "안녕하세요! 세금·절세 관련 궁금한 점을 물어보세요. 국세청 자료를 근거로 답변해드려요.",
+  text: "안녕하십니까. 세금·절세 관련 궁금한 점을 문의해 주시기 바랍니다. 국세청 자료를 근거로 답변해 드립니다.",
   sources: [],
 };
 
@@ -115,9 +115,9 @@ function buildReferenceFacts(result) {
 }
 
 const DEFAULT_QUESTIONS = [
-  "ISA 비과세 한도가 얼마야?",
-  "연금저축이랑 IRP 세액공제 한도가 어떻게 돼?",
-  "연금을 나눠 받으면 왜 세금이 줄어들어?",
+  "ISA 비과세 한도는 얼마입니까?",
+  "연금저축과 IRP 세액공제 한도는 어떻게 됩니까?",
+  "연금을 나눠 받으면 왜 세금이 줄어듭니까?",
 ];
 
 // 진단 결과가 있으면, 실제로 계산된 숫자를 활용해 훨씬 구체적인 추천 질문을 만듭니다.
@@ -125,25 +125,25 @@ function buildSuggestedQuestions(result) {
   if (!result) return DEFAULT_QUESTIONS;
   const questions = [];
   const saving = result.pension_compare?.saving_by_split;
-  if (saving) questions.push(`연금을 나눠 받으면 왜 ${won(saving)} 절세되나요?`);
+  if (saving) questions.push(`연금을 나눠 받으면 왜 ${won(saving)} 절세됩니까?`);
 
   const addTax = result.financial_income_tax?.additional_total_tax;
-  if (addTax) questions.push(`제 금융소득 기준 예상 추가세액 ${won(addTax)}은 어떻게 계산된 거예요?`);
+  if (addTax) questions.push(`제 금융소득 기준 예상 추가세액 ${won(addTax)}은 어떻게 계산된 것입니까?`);
 
   const isaRate = result.limit_usage?.isa_annual_usage_rate;
   if (isaRate !== undefined && isaRate !== null) {
-    questions.push("ISA 한도를 올해 더 채우면 어떤 효과가 있을까요?");
+    questions.push("ISA 한도를 올해 더 채우면 어떤 효과가 있습니까?");
   }
 
   if (result.pension_start_recommendation) {
-    questions.push("개인연금·IRP는 몇 살부터 받는 게 좋을까요? 세금 말고 다른 것도 같이 알려주세요");
+    questions.push("개인연금·IRP는 몇 살부터 받는 것이 좋습니까? 세금 외의 다른 사항도 함께 알려 주시기 바랍니다.");
   }
 
   if (result.national_pension_start_age) {
-    questions.push(`국민연금은 왜 ${result.national_pension_start_age.start_age}세부터 받게 되나요? 앞당길 수도 있나요?`);
+    questions.push(`국민연금은 왜 ${result.national_pension_start_age.start_age}세부터 받게 됩니까? 앞당길 수도 있습니까?`);
   }
 
-  questions.push("지금 제 상황에서 가장 먼저 확인해야 할 건 뭔가요?");
+  questions.push("지금 제 상황에서 가장 먼저 확인해야 할 것은 무엇입니까?");
   return questions; // 슬라이싱은 이미 물어본 질문을 걸러낸 뒤 호출 쪽에서 처리합니다.
 }
 
@@ -375,7 +375,7 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
         ...prev,
         {
           role: "assistant",
-          text: "말씀해주신 내용으로 간단 진단을 완료했어요. 왼쪽 화면에서 자세한 탭도 확인할 수 있어요. 이어서 질문에 답변드릴게요.",
+          text: "말씀해 주신 내용으로 간단 진단을 완료했습니다. 왼쪽 화면에서 자세한 탭도 확인하실 수 있습니다. 이어서 질문에 답변해 드리겠습니다.",
           sources: [],
         },
       ]);
@@ -383,7 +383,7 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
     } catch (err) {
       // 백엔드 원본 에러(영어 필드명 등)를 그대로 보여주지 않고 자연스러운 안내로 바꿉니다.
       const rawDetail = err.response?.data?.detail;
-      const detail = rawDetail ? friendlyDiagnosisError(rawDetail) : "진단 계산 중 문제가 발생했어요.";
+      const detail = rawDetail ? friendlyDiagnosisError(rawDetail) : "진단 계산 중 문제가 발생했습니다.";
       setError(detail);
       setLoading(false);
     }
@@ -471,8 +471,8 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
 
           <p className="chat-widget-subtitle">
             {result
-              ? "진단 결과를 참고해서 답변해드려요."
-              : "진단을 먼저 실행하면 결과를 참고한 답변도 받을 수 있어요."}
+              ? "진단 결과를 참고하여 답변해 드립니다."
+              : "진단을 먼저 실행하면 결과를 참고한 답변도 받으실 수 있습니다."}
           </p>
 
           <ReferenceFactsCard facts={referenceFacts} />
@@ -502,7 +502,7 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
                   <ShieldIcon size={14} />
                 </div>
                 <div className="chat-bubble chat-bubble--assistant chat-bubble--loading">
-                  답변 생각하는 중...
+                  답변을 생각하는 중입니다...
                 </div>
               </div>
             )}
@@ -512,14 +512,14 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
 
           {pendingProfile && (
             <div className="chat-confirm-profile">
-              <p className="chat-confirm-profile__title">말씀하신 내용을 이렇게 이해했어요</p>
+              <p className="chat-confirm-profile__title">말씀하신 내용을 다음과 같이 이해했습니다.</p>
               <ul>
                 {describeProfile(pendingProfile).map((line) => (
                   <li key={line}>{line}</li>
                 ))}
               </ul>
               <p className="chat-confirm-profile__note">
-                나머지 값은 일반적인 값으로 채워 간단 진단할게요. 정확도를 높이려면 왼쪽 진단 폼을 직접 채워주세요.
+                나머지 값은 일반적인 값으로 채워 간단히 진단합니다. 정확도를 높이려면 왼쪽 진단 폼을 직접 입력해 주시기 바랍니다.
               </p>
               <div className="chat-confirm-profile__actions">
                 <button
@@ -536,7 +536,7 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
                   onClick={handleDeclineProfile}
                   disabled={loading}
                 >
-                  그냥 질문만 답해줘
+                  질문에만 답변받기
                 </button>
               </div>
             </div>
@@ -544,7 +544,7 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
 
           {showNudge && !result && !pendingProfile && (
             <div className="chat-nudge">
-              <p>더 정확한 숫자로 답변받으시려면 왼쪽 진단 폼에 정보를 입력해보세요.</p>
+              <p>더 정확한 숫자로 답변받으시려면 왼쪽 진단 폼에 정보를 입력해 주시기 바랍니다.</p>
               <button
                 type="button"
                 className="chat-nudge-btn"
@@ -593,7 +593,7 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
                 setInput(e.currentTarget.value);
               }}
               onKeyDown={handleKeyDown}
-              placeholder="궁금한 점을 입력해주세요."
+              placeholder="궁금하신 점을 입력해 주시기 바랍니다."
               rows={2}
             />
             <button type="submit" className="btn-primary chat-send-btn" disabled={loading || !input.trim()}>
@@ -631,7 +631,7 @@ export default function ChatWidget({ result, requestPayload, onRunDiagnosis, onO
           >
             ✕
           </button>
-          <p>궁금한 거 물어보세요!</p>
+          <p>궁금하신 사항을 문의해 주시기 바랍니다.</p>
         </div>
       )}
 

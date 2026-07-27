@@ -112,19 +112,19 @@ function NumberField({ label, hint, name, value, onChange, unit = "원", require
 // 그걸 여기서 다시 챙기는 것도 겸합니다. 문제가 있으면 안내 문구를, 없으면 null을 돌려줍니다.
 function validateDiagnosisForm(normalized) {
   if (normalized.age < 19 || normalized.age > MAX_AGE) {
-    return `현재 나이는 19세부터 ${MAX_AGE}세 사이로 입력해주세요.`;
+    return `현재 나이는 19세부터 ${MAX_AGE}세 사이로 입력해 주시기 바랍니다.`;
   }
   if (normalized.birth_year < 1900 || normalized.birth_year > new Date().getFullYear()) {
-    return "출생연도를 다시 확인해주세요.";
+    return "출생연도를 다시 확인해 주시기 바랍니다.";
   }
   if (normalized.retirement_age < 19 || normalized.retirement_age > MAX_AGE) {
-    return `개인연금·IRP 수령 예정 나이는 19세부터 ${MAX_AGE}세 사이로 입력해주세요.`;
+    return `개인연금·IRP 수령 예정 나이는 19세부터 ${MAX_AGE}세 사이로 입력해 주시기 바랍니다.`;
   }
   if (normalized.retirement_age < normalized.age) {
-    return "개인연금·IRP 수령 예정 나이는 현재 나이보다 같거나 커야 해요. 나이를 다시 확인해주세요.";
+    return "개인연금·IRP 수령 예정 나이는 현재 나이보다 같거나 커야 합니다. 나이를 다시 확인해 주시기 바랍니다.";
   }
   if (normalized.pension_split_years <= 0) {
-    return "연금 분할 수령 기간은 1년 이상이어야 해요.";
+    return "연금 분할 수령 기간은 1년 이상이어야 합니다.";
   }
   return null;
 }
@@ -158,7 +158,7 @@ export default function DiagnosisForm({ onSubmit, loading, initialValues }) {
     // 못 알아차리게 됩니다.
     const missingFields = REQUIRED_FIELDS.filter(({ name }) => form[name] === "").map(({ label }) => label);
     if (missingFields.length > 0) {
-      setValidationError(`다음 항목을 입력해주세요: ${missingFields.join(", ")}`);
+      setValidationError(`다음 항목을 입력해 주시기 바랍니다: ${missingFields.join(", ")}`);
       return;
     }
 
@@ -199,7 +199,7 @@ export default function DiagnosisForm({ onSubmit, loading, initialValues }) {
           onChange={handleChange}
           required
         />
-        <Field label="출생연도" hint="국민연금을 몇 살부터 받을 수 있는지 계산하는 데 써요">
+        <Field label="출생연도" hint="국민연금을 몇 살부터 받을 수 있는지 계산하는 데 사용됩니다.">
           <select name="birth_year" autoComplete="off" value={form.birth_year} onChange={handleChange}>
             {BIRTH_YEAR_OPTIONS.map((year) => (
               <option key={year} value={year}>
@@ -210,7 +210,7 @@ export default function DiagnosisForm({ onSubmit, loading, initialValues }) {
         </Field>
         <NumberField
           label="개인연금·IRP 수령 예정 나이"
-          hint="국민연금과는 별개로, 개인연금·IRP를 받기 시작하려는 나이예요"
+          hint="국민연금과는 별개로, 개인연금·IRP를 받기 시작하려는 나이입니다."
           name="retirement_age"
           unit="세"
           value={form.retirement_age}
@@ -245,13 +245,13 @@ export default function DiagnosisForm({ onSubmit, loading, initialValues }) {
         />
         <NumberField
           label="종합소득 과세표준 (이자·배당 소득 제외 나머지 소득)"
-          hint="잘 모르시면 0으로 두세요. 위에 입력한 총소득으로 자동 계산됩니다"
+          hint="잘 모르실 경우 0으로 두시면, 위에 입력한 총소득을 기준으로 자동 계산됩니다."
           name="other_tax_base"
           min="0"
           value={form.other_tax_base}
           onChange={handleChange}
         />
-        <Field label={`보유 금융상품 예상 연 수익률 (${form.annual_yield_rate_pct}%)`} hint="잘 모르면 4% 정도로 두세요">
+        <Field label={`보유 금융상품 예상 연 수익률 (${form.annual_yield_rate_pct}%)`} hint="특별히 알고 계신 수익률이 없다면 4%로 두시면 됩니다.">
           <input
             type="range"
             name="annual_yield_rate_pct"
@@ -275,7 +275,7 @@ export default function DiagnosisForm({ onSubmit, loading, initialValues }) {
         />
         <NumberField
           label="IRP 잔액 (개인형 퇴직연금 계좌에 모인 돈)"
-          hint="퇴직금 등을 넣어두는 계좌예요"
+          hint="퇴직금 등을 넣어두는 계좌입니다."
           name="irp_balance"
           min="0"
           value={form.irp_balance}
@@ -283,13 +283,13 @@ export default function DiagnosisForm({ onSubmit, loading, initialValues }) {
         />
         <NumberField
           label="예상 연금 수령 총액"
-          hint="0으로 두면 위 연금저축 + IRP 잔액을 합쳐서 계산해요"
+          hint="0으로 두면 위 연금저축과 IRP 잔액을 합산하여 계산합니다."
           name="expected_pension_amount"
           min="0"
           value={form.expected_pension_amount}
           onChange={handleChange}
         />
-        <Field label={`연금 분할 수령 기간 (몇 년에 걸쳐 나눠 받을지, ${form.pension_split_years}년)`} hint="예: 10년으로 두면 매년 1/10씩 나눠 받는다고 계산해요">
+        <Field label={`연금 분할 수령 기간 (몇 년에 걸쳐 나눠 받을지, ${form.pension_split_years}년)`} hint="예: 10년으로 설정하면 매년 1/10씩 나눠 받는다고 계산합니다.">
           <input
             type="range"
             name="pension_split_years"
@@ -302,7 +302,7 @@ export default function DiagnosisForm({ onSubmit, loading, initialValues }) {
         <Field label="종신계약 연금 여부 (평생 나눠 받는 종신형 상품 가입 여부)">
           <input type="checkbox" name="lifetime_annuity_contract" checked={form.lifetime_annuity_contract} onChange={handleChange} />
         </Field>
-        <Field label="귀속 세율 기준연도 (세금 계산에 적용할 기준 연도)" hint="특별한 이유 없으면 최신 연도(2026) 그대로 두세요">
+        <Field label="귀속 세율 기준연도 (세금 계산에 적용할 기준 연도)" hint="특별한 이유가 없다면 최신 연도(2026)로 두시기 바랍니다.">
           <select name="tax_year" autoComplete="off" value={form.tax_year} onChange={handleChange}>
             <option value={2026}>2026년 기준</option>
             <option value={2025}>2025년 기준</option>
@@ -356,7 +356,7 @@ export default function DiagnosisForm({ onSubmit, loading, initialValues }) {
       <div className="diagnosis-submit-bar">
         {validationError && <p className="diagnosis-validation-error">{validationError}</p>}
         <button type="submit" className="btn-primary" disabled={loading}>
-          {loading ? "진단 중..." : "🔍 절세 진단 시작"}
+          {loading ? "진단 중입니다..." : "🔍 절세 진단 시작"}
         </button>
       </div>
     </form>

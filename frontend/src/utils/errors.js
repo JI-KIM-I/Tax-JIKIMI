@@ -28,28 +28,28 @@ const FIELD_LABELS = {
  */
 export function friendlyDiagnosisError(detail) {
   if (!detail || typeof detail !== "string") {
-    return "입력값을 다시 확인해주세요.";
+    return "입력값을 다시 확인해 주시기 바랍니다.";
   }
 
   const nonNegativeMatch = detail.match(/^(\w+) must be non-negative$/);
   if (nonNegativeMatch) {
     const label = FIELD_LABELS[nonNegativeMatch[1]] || nonNegativeMatch[1];
-    return `"${label}" 값은 0 이상이어야 해요. 다시 확인해주세요.`;
+    return `"${label}" 값은 0 이상이어야 합니다. 다시 확인해 주시기 바랍니다.`;
   }
 
   if (detail === "retirement_age must be greater than or equal to age") {
-    return "개인연금·IRP 수령 예정 나이는 현재 나이보다 같거나 커야 해요. 나이를 다시 확인해주세요.";
+    return "개인연금·IRP 수령 예정 나이는 현재 나이보다 같거나 커야 합니다. 나이를 다시 확인해 주시기 바랍니다.";
   }
   if (detail === "pension_split_years must be positive") {
-    return "연금 분할 수령 기간은 1년 이상이어야 해요.";
+    return "연금 분할 수령 기간은 1년 이상이어야 합니다.";
   }
   if (detail === "annual_yield_rate must be positive") {
-    return "보유 금융상품 예상 연 수익률은 0%보다 커야 해요.";
+    return "보유 금융상품 예상 연 수익률은 0%보다 커야 합니다.";
   }
   if (detail === "current_age must be <= max_start_age") {
-    return "추천 탐색 최대 나이는 현재 나이보다 같거나 커야 해요.";
+    return "추천 탐색 최대 나이는 현재 나이보다 같거나 커야 합니다.";
   }
 
   // 매핑에 없는 에러는 원문(영어 필드명 등)을 그대로 노출하지 않고 일반적인 안내로 대체합니다.
-  return "입력값을 다시 확인해주세요. 문제가 계속되면 알려주세요.";
+  return "입력값을 다시 확인해 주시기 바랍니다. 문제가 계속되면 알려 주시기 바랍니다.";
 }

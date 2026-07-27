@@ -9,7 +9,7 @@ import { won } from "../utils/format";
 function authErrorMessage(err) {
   const detail = err.response?.data?.detail;
   if (typeof detail === "string") return detail;
-  return "요청 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.";
+  return "요청 처리 중 문제가 발생했습니다. 잠시 후 다시 시도해 주시기 바랍니다.";
 }
 
 // 완벽한 이메일 검증(RFC 전체 스펙)은 안 하고, "누가 봐도 이메일이 아닌" 값만 걸러내는
@@ -49,7 +49,7 @@ export default function AuthPanel({ auth, onAuthSuccess, onLogout, onSelectDiagn
     // 브라우저 기본 "이메일 형식을 확인하세요" 팝업은 스타일이 안 맞아서, 직접 검사하고
     // 우리 문구(.auth-panel-error)로 보여줍니다. <form noValidate>로 네이티브 팝업 자체를 꺼둡니다.
     if (!EMAIL_PATTERN.test(form.email.trim())) {
-      setError("올바른 이메일 형식이 아니에요. (예: name@example.com)");
+      setError("올바른 이메일 형식이 아닙니다. (예: name@example.com)");
       return;
     }
 
@@ -105,7 +105,7 @@ export default function AuthPanel({ auth, onAuthSuccess, onLogout, onSelectDiagn
 
   const handleDeleteDiagnosis = async (id) => {
     if (!auth?.token) return;
-    if (!window.confirm("이 진단 기록을 삭제할까요? 되돌릴 수 없어요.")) return;
+    if (!window.confirm("이 진단 기록을 삭제하시겠습니까? 삭제 후에는 되돌릴 수 없습니다.")) return;
     try {
       await deleteDiagnosis(id, auth.token);
       setDiagnoses((prev) => (prev ? prev.filter((d) => d._id !== id) : prev));
@@ -121,28 +121,34 @@ export default function AuthPanel({ auth, onAuthSuccess, onLogout, onSelectDiagn
     return (
       <div className="auth-panel auth-panel--logged-in">
         <div className="auth-panel-user">
-          <span className="auth-panel-avatar" aria-hidden="true">
-            {avatarInitial}
-          </span>
-          <span className="auth-panel-user-label">{label} 님</span>
-          <button
-            type="button"
-            className="auth-panel-toggle auth-panel-toggle--ghost auth-panel-toggle--small"
-            onClick={handleToggleHistory}
-          >
-            내 진단 기록
-          </button>
-          <button type="button" className="auth-panel-logout-btn" onClick={handleLogout}>
-            로그아웃
-          </button>
+          <div className="auth-panel-identity">
+            <span className="auth-panel-avatar" aria-hidden="true">
+              {avatarInitial}
+            </span>
+            <span className="auth-panel-user-label">{label} 님</span>
+          </div>
+          <div className="auth-panel-actions">
+            <button
+              type="button"
+              className="auth-panel-toggle auth-panel-toggle--ghost auth-panel-toggle--small"
+              onClick={handleToggleHistory}
+            >
+              내 진단 기록
+            </button>
+            {/* 로그아웃은 "내 진단 기록"보다 덜 중요하고 잘 안 쓰는 동작이라, 같은 버튼
+                박스 대신 옅은 텍스트 링크로 눈에 덜 띄게 구분합니다. */}
+            <button type="button" className="auth-panel-logout-btn" onClick={handleLogout}>
+              로그아웃
+            </button>
+          </div>
         </div>
 
         {historyOpen && (
           <div className="auth-history-dropdown">
-            {historyLoading && <p className="auth-history-empty">불러오는 중...</p>}
+            {historyLoading && <p className="auth-history-empty">불러오는 중입니다...</p>}
             {historyError && <p className="auth-history-empty">{historyError}</p>}
             {!historyLoading && !historyError && diagnoses && diagnoses.length === 0 && (
-              <p className="auth-history-empty">저장된 진단 기록이 없어요.</p>
+              <p className="auth-history-empty">저장된 진단 기록이 없습니다.</p>
             )}
             {!historyLoading && diagnoses && diagnoses.length > 0 && (
               <ul>
@@ -249,12 +255,12 @@ export default function AuthPanel({ auth, onAuthSuccess, onLogout, onSelectDiagn
             )}
             {error && <p className="auth-panel-error">{error}</p>}
             <button type="submit" className="btn-primary" disabled={loading}>
-              {loading ? "처리 중..." : mode === "signup" ? "회원가입" : "로그인"}
+              {loading ? "처리 중입니다..." : mode === "signup" ? "회원가입" : "로그인"}
             </button>
           </form>
 
           <p className="auth-panel-switch">
-            {mode === "signup" ? "이미 계정이 있으신가요? " : "계정이 없으신가요? "}
+            {mode === "signup" ? "이미 계정이 있으십니까? " : "계정이 없으십니까? "}
             <button
               type="button"
               onClick={() => {
