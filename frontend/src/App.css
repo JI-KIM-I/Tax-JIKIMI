@@ -158,6 +158,23 @@
   box-sizing: border-box;
 }
 
+/* width: 100%를 줘도, select는 OS 네이티브 컨트롤(특히 macOS)로 렌더링되면서 실제 박스 폭이
+   그만큼 안 맞춰지는 경우가 있었습니다. appearance: none으로 네이티브 스타일을 끄고 폭을
+   완전히 CSS로 통제하는 대신, 사라진 화살표는 그라디언트로 만든 심플한 화살표로 대체합니다. */
+.field select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  display: block;
+  min-width: 0;
+  padding-right: 28px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--color-ink-soft) 50%),
+    linear-gradient(135deg, var(--color-ink-soft) 50%, transparent 50%);
+  background-position: calc(100% - 16px) center, calc(100% - 11px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+
 /* "원" 같은 단위는 입력값 안에 안 섞이게, 입력칸 오른쪽에 회색 글자로 따로 얹습니다 */
 .field-number-wrap {
   position: relative;
@@ -297,6 +314,13 @@
   /* 좁은 폭에서 "궁금한" 같은 단어가 글자 단위로 잘려 다음 줄로 넘어가 보였습니다.
      공백 기준으로만 줄바꿈되게 합니다. */
   word-break: keep-all;
+}
+
+/* "5060세대"처럼 숫자+한글이 붙어 하나의 의미 단위를 이루는 표현은, word-break: keep-all을
+   줘도 숫자↔한글 경계에서 줄바꿈될 수 있습니다(keep-all은 한글 단어 내부 분리만 막아줍니다).
+   이 경계까지 막아서 "5060"과 "세대"가 서로 다른 줄로 쪼개지지 않게 합니다. */
+.nowrap {
+  white-space: nowrap;
 }
 
 .error-banner {

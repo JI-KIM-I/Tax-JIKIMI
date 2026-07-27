@@ -2,7 +2,6 @@ import { useState } from "react";
 
 // ChatWidget이 채팅에서 추출한 정보를 진단 payload로 합칠 때 기본값으로 재사용합니다.
 export const initialForm = {
-  age: 58,
   birth_year: 1968,
   retirement_age: 65,
   total_income: 80000000,
@@ -31,7 +30,9 @@ export const initialForm = {
 // 안전하게 기본값으로 채워집니다.
 export function payloadToFormValues(payload) {
   if (!payload) return initialForm;
-  const { annual_yield_rate, ...rest } = payload;
+  // age는 더 이상 폼이 직접 관리하는 값이 아니라 출생연도·귀속 세율 기준연도로부터 매번 다시
+  // 계산하므로, 예전에 저장된 기록에 age가 남아 있어도 폼 쪽으로는 가져오지 않습니다.
+  const { annual_yield_rate, age, ...rest } = payload;
   return {
     ...initialForm,
     ...rest,
@@ -45,7 +46,11 @@ export function payloadToFormValues(payload) {
 const selectAllOnFocus = (e) => e.target.select();
 
 // 출생연도는 좌우로 미는 슬라이더보다, 눌러서 목록을 죽 내려보고 고르는 드롭다운이 더 자연스러워서
-// <select>로 바꿨습니다. "현재 나이" 상한(120세)과 맞춰서, 그만큼 오래된 출생연도까지 열어둡니다.
+// <select>로 바꿨습니다. 나이 상한(120세)과 맞춰서, 그만큼 오래된 출생연도까지 열어둡니다.
+// "나이"는 더 이상 별도 입력칸이 없습니다 - 예전에는 나이와 출생연도를 각각 따로 입력받아서
+// 둘이 서로 안 맞는 경우(예: 58세라고 입력했는데 출생연도는 1990년생)가 생길 수 있었는데,
+// 출생연도(+귀속 세율 기준연도) 하나만 입력받고 나이는 항상 여기서 자동으로 계산해서
+// 그 문제 자체가 생기지 않게 했습니다.
 const currentYear = new Date().getFullYear();
 const MAX_AGE = 120;
 const BIRTH_YEAR_OPTIONS = Array.from({ length: MAX_AGE + 1 }, (_, i) => currentYear - i);
@@ -70,7 +75,6 @@ function Field({ label, hint, required, children }) {
 // 값이 없으면 진단 자체가 성립 안 되는 핵심 식별값만 필수로 둡니다. ISA·연금저축 납입액처럼
 // "안 쓰고 있으면 0"이 그 자체로 유효한 답인 금액 필드는 필수로 걸지 않습니다.
 const REQUIRED_FIELDS = [
-  { name: "age", label: "현재 나이" },
   { name: "retirement_age", label: "개인연금·IRP 수령 예정 나이" },
   { name: "total_income", label: "연간 총급여·종합소득" },
 ];
@@ -110,18 +114,19 @@ function NumberField({ label, hint, name, value, onChange, unit = "원", require
 // 백엔드가 거절할 게 뻔한(혹은 값 자체가 말이 안 되는) 입력들을 API 호출 전에 미리 걸러냅니다.
 // 텍스트 입력으로 바뀌면서 예전에 <input type="number" min max>가 해주던 범위 제한이 없어졌는데,
 // 그걸 여기서 다시 챙기는 것도 겸합니다. 문제가 있으면 안내 문구를, 없으면 null을 돌려줍니다.
+// normalized에는 handleSubmit에서 미리 계산해 넣은 age(= tax_year - birth_year)가 들어있습니다.
 function validateDiagnosisForm(normalized) {
-  if (normalized.age < 19 || normalized.age > MAX_AGE) {
-    return `현재 나이는 19세부터 ${MAX_AGE}세 사이로 입력해 주시기 바랍니다.`;
-  }
   if (normalized.birth_year < 1900 || normalized.birth_year > new Date().getFullYear()) {
     return "출생연도를 다시 확인해 주시기 바랍니다.";
+  }
+  if (normalized.age < 19 || normalized.age > MAX_AGE) {
+    return `출생연도를 기준으로 계산한 나이가 19세부터 ${MAX_AGE}세 사이를 벗어났습니다. 출생연도를 다시 확인해 주시기 바랍니다.`;
   }
   if (normalized.retirement_age < 19 || normalized.retirement_age > MAX_AGE) {
     return `개인연금·IRP 수령 예정 나이는 19세부터 ${MAX_AGE}세 사이로 입력해 주시기 바랍니다.`;
   }
   if (normalized.retirement_age < normalized.age) {
-    return "개인연금·IRP 수령 예정 나이는 현재 나이보다 같거나 커야 합니다. 나이를 다시 확인해 주시기 바랍니다.";
+    return "개인연금·IRP 수령 예정 나이는 출생연도로 계산된 현재 나이보다 같거나 커야 합니다. 출생연도 또는 개인연금·IRP 수령 예정 나이를 다시 확인해 주시기 바랍니다.";
   }
   if (normalized.pension_split_years <= 0) {
     return "연금 분할 수령 기간은 1년 이상이어야 합니다.";
@@ -168,6 +173,11 @@ export default function DiagnosisForm({ onSubmit, loading, initialValues }) {
       Object.entries(rest).map(([key, val]) => [key, val === "" ? 0 : val])
     );
 
+    // "나이"는 따로 입력받지 않고, 출생연도·귀속 세율 기준연도로부터 매번 계산합니다.
+    // 나이와 출생연도를 각각 따로 입력받으면 둘이 서로 안 맞는 경우가 생길 수 있어서,
+    // 아예 값을 하나만 받고 나이는 항상 여기서 파생시킵니다.
+    normalized.age = normalized.tax_year - normalized.birth_year;
+
     // 백엔드에 물어보나마나인 흔한 입력 실수는 여기서 먼저 걸러서, 바로 안내하고 API 호출 자체를 막습니다.
     const validationMessage = validateDiagnosisForm(normalized);
     if (validationMessage) {
@@ -191,15 +201,10 @@ export default function DiagnosisForm({ onSubmit, loading, initialValues }) {
       <div className="diagnosis-form-fields">
       <fieldset>
         <legend>1. 기본 정보</legend>
-        <NumberField
-          label="현재 나이"
-          name="age"
-          unit="세"
-          value={form.age}
-          onChange={handleChange}
-          required
-        />
-        <Field label="출생연도" hint="국민연금을 몇 살부터 받을 수 있는지 계산하는 데 사용됩니다.">
+        <Field
+          label="출생연도"
+          hint="국민연금을 몇 살부터 받을 수 있는지 계산하는 데 사용됩니다. 나이는 출생연도와 귀속 세율 기준연도를 기준으로 자동 계산됩니다."
+        >
           <select name="birth_year" autoComplete="off" value={form.birth_year} onChange={handleChange}>
             {BIRTH_YEAR_OPTIONS.map((year) => (
               <option key={year} value={year}>

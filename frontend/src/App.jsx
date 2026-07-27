@@ -181,7 +181,7 @@ export default function App() {
         <ShieldIcon size={30} />
         <div className="app-header-title">
           <h1>세금지킴이</h1>
-          <p className="app-subtitle">은퇴를 앞둔 5060세대를 위한 AI 절세 진단</p>
+          <p className="app-subtitle">은퇴를 앞둔 <span className="nowrap">5060세대</span>를 위한 AI 절세 진단</p>
         </div>
         <div className="app-header-auth">
           <AuthPanel
@@ -211,7 +211,7 @@ export default function App() {
               <ShieldIcon size={48} />
               <h2 className="empty-state-title">세금지킴이는 이런 서비스입니다</h2>
               <p className="empty-state-text">
-                은퇴를 앞둔 5060세대가 국민연금·개인연금·IRP·ISA 등을 어떻게 운용해야 금융소득종합과세와
+                은퇴를 앞둔 <span className="nowrap">5060세대</span>가 국민연금·개인연금·IRP·ISA 등을 어떻게 운용해야 금융소득종합과세와
                 세금 부담을 줄일 수 있는지 미리 점검해 볼 수 있도록 돕는 AI 절세 진단 서비스입니다.
               </p>
               <p className="empty-state-text">
