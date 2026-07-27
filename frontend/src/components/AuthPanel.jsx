@@ -12,6 +12,10 @@ function authErrorMessage(err) {
   return "요청 중 문제가 발생했어요. 잠시 후 다시 시도해주세요.";
 }
 
+// 완벽한 이메일 검증(RFC 전체 스펙)은 안 하고, "누가 봐도 이메일이 아닌" 값만 걸러내는
+// 정도로 단순하게 둡니다 - 브라우저 기본 검증 팝업 대신 우리 스타일 문구로 보여주기 위함입니다.
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const EMPTY_FORM = { email: "", password: "", name: "", nickname: "" };
 
 export default function AuthPanel({ auth, onAuthSuccess, onLogout, onSelectDiagnosis }) {
@@ -32,10 +36,24 @@ export default function AuthPanel({ auth, onAuthSuccess, onLogout, onSelectDiagn
     setForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  const openWithMode = (nextMode) => {
+    setMode(nextMode);
+    setOpen(true);
+    setError(null);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+
+    // 브라우저 기본 "이메일 형식을 확인하세요" 팝업은 스타일이 안 맞아서, 직접 검사하고
+    // 우리 문구(.auth-panel-error)로 보여줍니다. <form noValidate>로 네이티브 팝업 자체를 꺼둡니다.
+    if (!EMAIL_PATTERN.test(form.email.trim())) {
+      setError("올바른 이메일 형식이 아니에요. (예: name@example.com)");
+      return;
+    }
+
+    setLoading(true);
     try {
       const data =
         mode === "signup"
@@ -98,15 +116,23 @@ export default function AuthPanel({ auth, onAuthSuccess, onLogout, onSelectDiagn
 
   if (auth?.user) {
     const label = auth.user.nickname || auth.user.name || auth.user.email;
+    const avatarInitial = label.trim().charAt(0).toUpperCase();
 
     return (
       <div className="auth-panel auth-panel--logged-in">
         <div className="auth-panel-user">
+          <span className="auth-panel-avatar" aria-hidden="true">
+            {avatarInitial}
+          </span>
           <span className="auth-panel-user-label">{label} 님</span>
-          <button type="button" className="auth-panel-link" onClick={handleToggleHistory}>
+          <button
+            type="button"
+            className="auth-panel-toggle auth-panel-toggle--ghost auth-panel-toggle--small"
+            onClick={handleToggleHistory}
+          >
             내 진단 기록
           </button>
-          <button type="button" className="auth-panel-link" onClick={handleLogout}>
+          <button type="button" className="auth-panel-logout-btn" onClick={handleLogout}>
             로그아웃
           </button>
         </div>
@@ -161,36 +187,27 @@ export default function AuthPanel({ auth, onAuthSuccess, onLogout, onSelectDiagn
 
   return (
     <div className="auth-panel">
-      <button type="button" className="auth-panel-toggle" onClick={() => setOpen((v) => !v)}>
-        로그인
-      </button>
+      <div className="auth-panel-toggle-group">
+        <button type="button" className="auth-panel-toggle" onClick={() => openWithMode("login")}>
+          로그인
+        </button>
+        <button
+          type="button"
+          className="auth-panel-toggle auth-panel-toggle--ghost"
+          onClick={() => openWithMode("signup")}
+        >
+          회원가입
+        </button>
+      </div>
 
       {open && (
         <div className="auth-panel-dropdown">
-          <div className="auth-panel-tabs">
-            <button
-              type="button"
-              className={mode === "login" ? "active" : ""}
-              onClick={() => {
-                setMode("login");
-                setError(null);
-              }}
-            >
-              로그인
-            </button>
-            <button
-              type="button"
-              className={mode === "signup" ? "active" : ""}
-              onClick={() => {
-                setMode("signup");
-                setError(null);
-              }}
-            >
-              회원가입
-            </button>
-          </div>
+          {/* 위 로그인/회원가입 버튼으로 이미 모드를 정하고 들어왔으니, 패널 안에 또
+              탭을 두는 건 중복이었습니다. 지금 모드를 제목으로 보여주고, 잘못 들어왔을 때만
+              아래 "계정이 없으신가요?" 링크로 전환하게 했습니다. */}
+          <p className="auth-panel-heading">{mode === "signup" ? "회원가입" : "로그인"}</p>
 
-          <form onSubmit={handleSubmit} className="auth-panel-form">
+          <form onSubmit={handleSubmit} className="auth-panel-form" noValidate>
             <input
               type="email"
               name="email"
@@ -235,6 +252,19 @@ export default function AuthPanel({ auth, onAuthSuccess, onLogout, onSelectDiagn
               {loading ? "처리 중..." : mode === "signup" ? "회원가입" : "로그인"}
             </button>
           </form>
+
+          <p className="auth-panel-switch">
+            {mode === "signup" ? "이미 계정이 있으신가요? " : "계정이 없으신가요? "}
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "signup" ? "login" : "signup");
+                setError(null);
+              }}
+            >
+              {mode === "signup" ? "로그인" : "회원가입"}
+            </button>
+          </p>
         </div>
       )}
     </div>

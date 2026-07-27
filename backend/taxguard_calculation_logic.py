@@ -231,10 +231,12 @@ class PensionStartRecommendationResponse:
 
 @dataclass(frozen=True)
 class PublicPensionStartAgeResponse:
-    """국민연금 또는 공무원연금처럼 개인이 선택할 수 없고 규정으로 고정된 수급개시연령."""
+    """개인이 선택할 수 없고 규정으로 고정된 연금 수급개시연령. 지금은 국민연금에만 씁니다.
+    pension_type/basis_label을 문자열로 열어둔 건, 나중에 공무원연금처럼 기준(퇴직연도 등)이
+    다른 연금이 추가돼도 이 구조를 그대로 재사용할 수 있게 하기 위해서입니다."""
 
-    pension_type: str  # "국민연금" | "공무원연금"
-    basis_label: str  # "출생연도" | "퇴직연도"
+    pension_type: str  # 예: "국민연금"
+    basis_label: str  # 예: "출생연도"
     basis_year: int
     start_age: int
     note: str
