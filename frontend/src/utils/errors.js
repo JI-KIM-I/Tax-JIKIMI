@@ -5,7 +5,8 @@
 
 const FIELD_LABELS = {
   age: "현재 나이",
-  retirement_age: "연금 수령 예정 나이",
+  birth_year: "출생연도",
+  retirement_age: "개인연금·IRP 수령 예정 나이",
   total_income: "연간 총급여·종합소득",
   interest_income: "이자소득",
   dividend_income: "배당소득",
@@ -37,7 +38,7 @@ export function friendlyDiagnosisError(detail) {
   }
 
   if (detail === "retirement_age must be greater than or equal to age") {
-    return "연금 수령 예정 나이는 현재 나이보다 같거나 커야 해요. 나이를 다시 확인해주세요.";
+    return "개인연금·IRP 수령 예정 나이는 현재 나이보다 같거나 커야 해요. 나이를 다시 확인해주세요.";
   }
   if (detail === "pension_split_years must be positive") {
     return "연금 분할 수령 기간은 1년 이상이어야 해요.";

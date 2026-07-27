@@ -206,6 +206,7 @@ class DiagnosisRequestBody(BaseModel):
     irp_paid_this_year: int = 6_000_000
     recommend_pension_start: bool = True
     max_pension_start_age: int = 85
+    birth_year: Optional[int] = None
 
     def to_dataclass(self) -> DiagnosisRequest:
         data = _model_dump(self)

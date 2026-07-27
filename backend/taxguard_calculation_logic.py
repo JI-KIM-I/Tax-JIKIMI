@@ -36,6 +36,22 @@ ISA_GENERAL_TOTAL_LIMIT = 100_000_000
 PENSION_SAVINGS_TAX_CREDIT_LIMIT = 6_000_000
 PENSION_IRP_COMBINED_TAX_CREDIT_LIMIT = 9_000_000
 
+# 국민연금 노령연금 수급개시연령 (출생연도 기준, 국민연금법 부칙).
+# 개인이 선택하는 값이 아니라 출생연도로 고정되며, 조기노령연금으로 최대 5년 앞당길 수 있지만
+# 그만큼 감액되는 별도 제도입니다. (start_year, end_year, start_age)
+NATIONAL_PENSION_START_AGE_BY_BIRTH_YEAR: tuple[tuple[int, int, int], ...] = (
+    (0, 1952, 60),
+    (1953, 1956, 61),
+    (1957, 1960, 62),
+    (1961, 1964, 63),
+    (1965, 1968, 64),
+    (1969, 9999, 65),
+)
+
+# 공무원연금은 국민연금과 지급개시연령 산정 기준(퇴직연도)부터 다른 별도 제도입니다.
+# 이 앱의 대상 페르소나(은퇴 후 국민연금+사적연금+ISA를 굴리는 일반인)에는 해당하지 않는 경우가
+# 대부분이라 전용 계산 필드는 두지 않고, 관련 질문은 챗봇이 일반 지식으로 안내합니다.
+
 
 @dataclass(frozen=True)
 class TaxBand:
@@ -144,6 +160,10 @@ class DiagnosisRequest:
     recommend_pension_start: bool = True
     max_pension_start_age: int = 85
 
+    # 국민연금 수급개시연령은 age/retirement_age(사적연금 수령 시점)와는 별개로 출생연도로 고정되어
+    # 계산됩니다. birth_year를 안 주면 tax_year - age로 추정합니다.
+    birth_year: Optional[int] = None
+
 
 # -----------------------------------------------------------------------------
 # 3. 결과 DTO
@@ -210,6 +230,17 @@ class PensionStartRecommendationResponse:
 
 
 @dataclass(frozen=True)
+class PublicPensionStartAgeResponse:
+    """국민연금 또는 공무원연금처럼 개인이 선택할 수 없고 규정으로 고정된 수급개시연령."""
+
+    pension_type: str  # "국민연금" | "공무원연금"
+    basis_label: str  # "출생연도" | "퇴직연도"
+    basis_year: int
+    start_age: int
+    note: str
+
+
+@dataclass(frozen=True)
 class LimitUsageGuideResponse:
     isa_paid_this_year: int
     isa_annual_limit: int
@@ -244,6 +275,7 @@ class DiagnosisResponse:
     product_shift: ProductShiftResponse
     pension_compare: PensionCompareResponse
     pension_start_recommendation: Optional[PensionStartRecommendationResponse]
+    national_pension_start_age: PublicPensionStartAgeResponse
     limit_usage: LimitUsageGuideResponse
     recommendations: list[str]
     scenario_comparison: list[ScenarioComparisonItem]
@@ -534,6 +566,43 @@ def compare_pension_withdrawal(request: PensionCompareRequest) -> PensionCompare
 
 
 # -----------------------------------------------------------------------------
+# 7.5. 계산 로직 3.5: 국민연금 수급개시연령 (개인 선택 불가, 출생연도로 고정)
+# -----------------------------------------------------------------------------
+#
+# 위 recommend_pension_start_age()/compare_pension_withdrawal()는 개인연금·IRP 같은
+# "사적연금"에만 해당합니다. 사적연금은 55세 이후 본인이 수령 시점을 고를 수 있어서
+# 세율 비교로 "추천"이 성립하지만, 국민연금은 출생연도로 수급개시연령이 고정되어 있어
+# 개인이 선택할 수 없습니다. 그래서 "추천"이 아니라 "계산된 고정값 안내"로 다룹니다.
+# (공무원연금은 국민연금과 산정 기준 자체가 달라 이 앱의 계산 대상에는 포함하지 않고,
+# 관련 질문은 챗봇이 일반 지식으로 안내합니다.)
+
+def get_national_pension_start_age(birth_year: int) -> int:
+    """국민연금 노령연금 수급개시연령 계산 (출생연도 기준, 개인 선택 불가)."""
+    _validate_non_negative(birth_year, "birth_year")
+
+    for start, end, age in NATIONAL_PENSION_START_AGE_BY_BIRTH_YEAR:
+        if start <= birth_year <= end:
+            return age
+
+    raise ValueError("birth_year out of supported range")
+
+
+def build_national_pension_start_age_info(birth_year: int) -> PublicPensionStartAgeResponse:
+    start_age = get_national_pension_start_age(birth_year)
+    return PublicPensionStartAgeResponse(
+        pension_type="국민연금",
+        basis_label="출생연도",
+        basis_year=birth_year,
+        start_age=start_age,
+        note=(
+            f"{birth_year}년생은 국민연금 노령연금을 {start_age}세부터 받을 수 있습니다. "
+            "이 나이는 출생연도로 고정되어 있어 개인연금·IRP처럼 본인이 시점을 고를 수 없습니다. "
+            "조기노령연금 제도로 최대 5년 앞당길 수는 있지만, 그만큼 연금액이 감액됩니다."
+        ),
+    )
+
+
+# -----------------------------------------------------------------------------
 # 8. 계산 로직 4: 연금 수령 시작 시점 추천
 # -----------------------------------------------------------------------------
 
@@ -565,9 +634,11 @@ def recommend_pension_start_age(request: PensionStartRecommendationRequest) -> P
     assert best is not None
 
     reason = (
-        f"단순 세율 기준으로 {request.pension_amount:,}원을 {request.split_years}년간 나누어 받을 때, "
-        f"{best.start_age}세 시작이 예상 세금 {best.split_total_tax:,}원으로 가장 낮습니다. "
-        "단, 실제 의사결정에는 필요한 생활비와 투자수익률을 함께 봐야 합니다."
+        f"[개인연금·IRP 등 사적연금 기준] 단순 세율 기준으로 {request.pension_amount:,}원을 "
+        f"{request.split_years}년간 나누어 받을 때, {best.start_age}세 시작이 예상 세금 "
+        f"{best.split_total_tax:,}원으로 가장 낮습니다. 단, 실제 의사결정에는 필요한 생활비와 "
+        "투자수익률을 함께 봐야 합니다. 국민연금·공무원연금은 이 계산과 무관하게 출생연도/퇴직연도로 "
+        "수급개시연령이 고정되어 있어 이 추천이 적용되지 않습니다."
     )
 
     return PensionStartRecommendationResponse(
@@ -651,9 +722,13 @@ def _build_recommendations(
     saving_by_split: int,
     estimated_tax_credit: int,
     pension_start_reason: Optional[str],
+    national_pension_note: Optional[str] = None,
 ) -> list[str]:
     """계산 결과 기반 추천 문구 생성. AI가 아니라 규칙 기반 추천입니다."""
     recommendations: list[str] = []
+
+    if national_pension_note:
+        recommendations.append(national_pension_note)
 
     if financial_income > FINANCIAL_INCOME_THRESHOLD:
         recommendations.append(
@@ -683,7 +758,9 @@ def _build_recommendations(
     if pension_start_reason:
         recommendations.append(pension_start_reason)
 
-    return recommendations[:5]
+    # 국민연금 안내 문구를 새로 맨 앞에 추가하면서 기존 5개 제한에 걸려 마지막 항목(개인연금·IRP
+    # 시작나이 추천)이 잘려나가던 문제가 있어, 국민연금 항목 1개만큼 한도를 늘렸습니다.
+    return recommendations[:6]
 
 
 def diagnose(request: DiagnosisRequest) -> DiagnosisResponse:
@@ -709,6 +786,9 @@ def diagnose(request: DiagnosisRequest) -> DiagnosisResponse:
         "max_pension_start_age": request.max_pension_start_age,
     }.items():
         _validate_non_negative(value, name)
+
+    if request.birth_year is not None:
+        _validate_non_negative(request.birth_year, "birth_year")
 
     if request.retirement_age < request.age:
         raise ValueError("retirement_age must be greater than or equal to age")
@@ -770,6 +850,11 @@ def diagnose(request: DiagnosisRequest) -> DiagnosisResponse:
         )
     )
 
+    # 국민연금은 개인이 시점을 고를 수 없는, 출생연도로 고정된 값입니다.
+    # birth_year를 별도로 안 받으면 tax_year - age로 근사합니다 (생월 미고려 MVP 근사치).
+    birth_year = request.birth_year if request.birth_year is not None else (request.tax_year - request.age)
+    national_pension_start_age = build_national_pension_start_age_info(birth_year)
+
     # 시나리오 비교: UI 그래프에 쓰기 위한 단순 시나리오.
     # A 현재 방식: 금융소득 추가세액 + 연금 일시금 세금
     current_tax = financial_income_result.additional_total_tax + pension_compare.lump_total_tax
@@ -820,6 +905,7 @@ def diagnose(request: DiagnosisRequest) -> DiagnosisResponse:
         saving_by_split=pension_compare.saving_by_split,
         estimated_tax_credit=limit_usage.estimated_tax_credit,
         pension_start_reason=start_reason,
+        national_pension_note=national_pension_start_age.note,
     )
 
     best = min(scenarios, key=lambda item: item.estimated_tax)
@@ -835,6 +921,7 @@ def diagnose(request: DiagnosisRequest) -> DiagnosisResponse:
         product_shift=product_shift,
         pension_compare=pension_compare,
         pension_start_recommendation=pension_start_recommendation,
+        national_pension_start_age=national_pension_start_age,
         limit_usage=limit_usage,
         recommendations=recommendations,
         scenario_comparison=scenarios,

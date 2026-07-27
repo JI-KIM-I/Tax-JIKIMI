@@ -44,7 +44,14 @@ const GREETING = {
 // (전체 result를 그대로 보내면 너무 길어져서 응답 속도·비용 면에서 불리해요)
 function summarizeResultForContext(result) {
   if (!result) return null;
-  const { financial_income_tax, pension_compare, limit_usage, report_summary, pension_start_recommendation } = result;
+  const {
+    financial_income_tax,
+    pension_compare,
+    limit_usage,
+    report_summary,
+    pension_start_recommendation,
+    national_pension_start_age,
+  } = result;
   const summary = {
     요약: report_summary,
     금융소득: financial_income_tax.financial_income,
@@ -56,14 +63,28 @@ function summarizeResultForContext(result) {
     예상세액공제액: limit_usage.estimated_tax_credit,
   };
 
+  // 국민연금은 개인연금·IRP와 달리 개인이 시점을 선택할 수 없고 출생연도로 고정된 값이라,
+  // "추천"이 아니라 계산된 고정값으로 별도 표시합니다. LLM이 이 둘을 혼동해서
+  // "국민연금도 앞당기거나 늦출 수 있다"는 식으로 답하지 않도록 구분해서 넘깁니다.
+  if (national_pension_start_age) {
+    summary.국민연금_수급개시연령_참고값 = {
+      출생연도: national_pension_start_age.basis_year,
+      수급개시연령: national_pension_start_age.start_age,
+      주의: national_pension_start_age.note,
+    };
+  }
+
   // 연금 시작 시점 추천은 더 이상 별도 탭으로 보여주지 않고, 챗봇 컨텍스트로만 전달합니다.
   // 세율만 비교한 단순 계산이라 생활비·건강·투자수익률은 반영 안 됐다는 걸 답변에 꼭 함께 안내해야 해서,
-  // 그 주의사항을 데이터 자체에 명시해 LLM이 참고하게 합니다.
+  // 그 주의사항을 데이터 자체에 명시해 LLM이 참고하게 합니다. 이 값은 개인연금·IRP(사적연금)에만
+  // 해당하고 국민연금에는 적용되지 않는다는 점도 함께 넘깁니다.
   if (pension_start_recommendation) {
-    summary.연금_시작나이_참고값 = {
+    summary.개인연금_IRP_시작나이_참고값 = {
       단순세율기준_추천나이: pension_start_recommendation.recommended_start_age,
       해당나이_예상분할수령세금: pension_start_recommendation.expected_split_total_tax,
-      주의: "세율만 비교한 단순 계산이라 생활비, 건강, 투자수익률 등은 반영하지 않음. 답변할 때 이 한계를 함께 설명할 것.",
+      주의:
+        "개인연금·IRP(사적연금)에만 해당하는 세율 비교 결과이며 국민연금에는 적용되지 않음. " +
+        "세율만 비교한 단순 계산이라 생활비, 건강, 투자수익률 등은 반영하지 않음. 답변할 때 이 한계를 함께 설명할 것.",
     };
   }
 
@@ -74,14 +95,19 @@ function summarizeResultForContext(result) {
 // 새로 계산하지 않고, 이미 백엔드가 계산해준 결과값만 보여줍니다 (숫자를 임의로 추정/가공하지 않음).
 function buildReferenceFacts(result) {
   if (!result) return [];
-  const { financial_income_tax, pension_compare, limit_usage } = result;
+  const { financial_income_tax, pension_compare, limit_usage, national_pension_start_age } = result;
   const facts = [
     ["금융소득", won(financial_income_tax?.financial_income)],
     ["금융소득 예상 추가세액", won(financial_income_tax?.additional_total_tax)],
-    ["연금 일시금 세금", won(pension_compare?.lump_total_tax)],
-    ["연금 분할수령 세금", won(pension_compare?.split_total_tax)],
-    ["분할수령 절세액", won(pension_compare?.saving_by_split)],
+    // 개인연금·IRP(사적연금) 기준 수치임을 라벨에서부터 구분해, 아래 국민연금 항목과 헷갈리지 않게 합니다.
+    ["개인연금·IRP 일시금 세금", won(pension_compare?.lump_total_tax)],
+    ["개인연금·IRP 분할수령 세금", won(pension_compare?.split_total_tax)],
+    ["개인연금·IRP 분할수령 절세액", won(pension_compare?.saving_by_split)],
     ["ISA 연간한도 활용률", pct(limit_usage?.isa_annual_usage_rate)],
+    [
+      "국민연금 수급개시연령",
+      national_pension_start_age ? `${national_pension_start_age.start_age}세 (${national_pension_start_age.basis_year}년생, 선택 불가)` : null,
+    ],
   ];
   return facts
     .filter(([, value]) => value && value !== "-" && value !== "-원")
@@ -110,7 +136,11 @@ function buildSuggestedQuestions(result) {
   }
 
   if (result.pension_start_recommendation) {
-    questions.push("연금은 몇 살부터 받는 게 좋을까요? 세금 말고 다른 것도 같이 알려주세요");
+    questions.push("개인연금·IRP는 몇 살부터 받는 게 좋을까요? 세금 말고 다른 것도 같이 알려주세요");
+  }
+
+  if (result.national_pension_start_age) {
+    questions.push(`국민연금은 왜 ${result.national_pension_start_age.start_age}세부터 받게 되나요? 앞당길 수도 있나요?`);
   }
 
   questions.push("지금 제 상황에서 가장 먼저 확인해야 할 건 뭔가요?");

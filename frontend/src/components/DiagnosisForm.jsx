@@ -3,6 +3,7 @@ import { useState } from "react";
 // ChatWidget이 채팅에서 추출한 정보를 진단 payload로 합칠 때 기본값으로 재사용합니다.
 export const initialForm = {
   age: 58,
+  birth_year: 1968,
   retirement_age: 65,
   total_income: 80000000,
   interest_income: 18000000,
@@ -26,6 +27,12 @@ export const initialForm = {
 // 숫자 입력칸을 클릭(포커스)하면 안에 있던 숫자가 전체 선택되도록 해서,
 // 바로 새 숫자를 타이핑하면 기존 값(예: 0)이 자동으로 지워지고 덮어써지게 합니다.
 const selectAllOnFocus = (e) => e.target.select();
+
+// 출생연도는 좌우로 미는 슬라이더보다, 눌러서 목록을 죽 내려보고 고르는 드롭다운이 더 자연스러워서
+// <select>로 바꿨습니다. "현재 나이" 상한(120세)과 맞춰서, 그만큼 오래된 출생연도까지 열어둡니다.
+const currentYear = new Date().getFullYear();
+const MAX_AGE = 120;
+const BIRTH_YEAR_OPTIONS = Array.from({ length: MAX_AGE + 1 }, (_, i) => currentYear - i);
 
 function Field({ label, hint, children }) {
   return (
@@ -56,6 +63,7 @@ function NumberField({ label, hint, name, value, onChange, unit = "원" }) {
         <input
           type="text"
           inputMode="numeric"
+          autoComplete="off"
           name={name}
           value={displayValue}
           onChange={handleChange}
@@ -72,14 +80,17 @@ function NumberField({ label, hint, name, value, onChange, unit = "원" }) {
 // 텍스트 입력으로 바뀌면서 예전에 <input type="number" min max>가 해주던 범위 제한이 없어졌는데,
 // 그걸 여기서 다시 챙기는 것도 겸합니다. 문제가 있으면 안내 문구를, 없으면 null을 돌려줍니다.
 function validateDiagnosisForm(normalized) {
-  if (normalized.age < 19 || normalized.age > 100) {
-    return "현재 나이는 19세부터 100세 사이로 입력해주세요.";
+  if (normalized.age < 19 || normalized.age > MAX_AGE) {
+    return `현재 나이는 19세부터 ${MAX_AGE}세 사이로 입력해주세요.`;
   }
-  if (normalized.retirement_age < 19 || normalized.retirement_age > 100) {
-    return "연금 수령 예정 나이는 19세부터 100세 사이로 입력해주세요.";
+  if (normalized.birth_year < 1900 || normalized.birth_year > new Date().getFullYear()) {
+    return "출생연도를 다시 확인해주세요.";
+  }
+  if (normalized.retirement_age < 19 || normalized.retirement_age > MAX_AGE) {
+    return `개인연금·IRP 수령 예정 나이는 19세부터 ${MAX_AGE}세 사이로 입력해주세요.`;
   }
   if (normalized.retirement_age < normalized.age) {
-    return "연금 수령 예정 나이는 현재 나이보다 같거나 커야 해요. 나이를 다시 확인해주세요.";
+    return "개인연금·IRP 수령 예정 나이는 현재 나이보다 같거나 커야 해요. 나이를 다시 확인해주세요.";
   }
   if (normalized.pension_split_years <= 0) {
     return "연금 분할 수령 기간은 1년 이상이어야 해요.";
@@ -143,8 +154,18 @@ export default function DiagnosisForm({ onSubmit, loading }) {
           value={form.age}
           onChange={handleChange}
         />
+        <Field label="출생연도" hint="국민연금을 몇 살부터 받을 수 있는지 계산하는 데 써요">
+          <select name="birth_year" autoComplete="off" value={form.birth_year} onChange={handleChange}>
+            {BIRTH_YEAR_OPTIONS.map((year) => (
+              <option key={year} value={year}>
+                {year}년생
+              </option>
+            ))}
+          </select>
+        </Field>
         <NumberField
-          label="연금 수령 예정 나이"
+          label="개인연금·IRP 수령 예정 나이"
+          hint="국민연금과는 별개로, 개인연금·IRP를 받기 시작하려는 나이예요"
           name="retirement_age"
           unit="세"
           value={form.retirement_age}
@@ -207,7 +228,7 @@ export default function DiagnosisForm({ onSubmit, loading }) {
         />
         <NumberField
           label="IRP 잔액 (개인형 퇴직연금 계좌에 모인 돈)"
-          hint="IRP: 퇴직금 등을 넣어두는 개인형 퇴직연금 계좌"
+          hint="퇴직금 등을 넣어두는 계좌예요"
           name="irp_balance"
           min="0"
           value={form.irp_balance}
@@ -235,7 +256,7 @@ export default function DiagnosisForm({ onSubmit, loading }) {
           <input type="checkbox" name="lifetime_annuity_contract" checked={form.lifetime_annuity_contract} onChange={handleChange} />
         </Field>
         <Field label="귀속 세율 기준연도 (세금 계산에 적용할 기준 연도)" hint="특별한 이유 없으면 최신 연도(2026) 그대로 두세요">
-          <select name="tax_year" value={form.tax_year} onChange={handleChange}>
+          <select name="tax_year" autoComplete="off" value={form.tax_year} onChange={handleChange}>
             <option value={2026}>2026년 기준</option>
             <option value={2025}>2025년 기준</option>
           </select>

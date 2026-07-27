@@ -7,7 +7,10 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 const client = axios.create({
   baseURL: BASE_URL,
-  timeout: 10000,
+  // Render 무료 요금제는 일정 시간 요청이 없으면 서버가 잠들었다가, 첫 요청이 오면 그때 다시
+  // 깨어나는 데 수십 초가 걸릴 수 있습니다. 10초로는 그 콜드스타트를 못 견디고 타임아웃 에러가 나서
+  // "계산 중 오류가 발생했습니다" 같은 문구만 뜨고 진짜 원인이 안 보였던 사례가 있어 30초로 늘렸습니다.
+  timeout: 30000,
 });
 
 /**
