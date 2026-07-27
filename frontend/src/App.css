@@ -134,6 +134,10 @@
   color: var(--color-ink-soft);
 }
 
+.field-required {
+  color: var(--color-alert);
+}
+
 .field-hint {
   font-size: 0.72rem;
   color: #8a9a97;
@@ -733,7 +737,7 @@
   width: 56px;
   /* 999px면 정사각형일 땐 완전한 원, labeled 상태처럼 폭이 넓어지면 알약(pill) 모양이 됩니다 */
   border-radius: 999px;
-  background: var(--color-ink);
+  background: var(--color-gold);
   border: none;
   box-shadow: 0 4px 16px rgba(22, 48, 46, 0.3);
   display: flex;
@@ -1157,5 +1161,334 @@
   .chat-intro-bubble {
     right: 16px;
     bottom: 84px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+   진단 저장 (로그인 후 "이 진단 저장하기")
+--------------------------------------------------------------------- */
+
+.report-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 20px;
+}
+
+/* report-actions가 바깥 여백을 관리하므로 안쪽 report-download 자체 여백은 없앱니다 */
+.report-actions .report-download {
+  margin: 0;
+}
+
+.report-actions-hint {
+  font-size: 0.82rem;
+  color: var(--color-ink-soft);
+}
+
+.save-message {
+  font-size: 0.85rem;
+  color: var(--color-guard-green);
+  margin: -8px 0 20px;
+}
+
+/* 저장 실패 등 API 에러 결과는 성공(초록)과 헷갈리지 않게 경고 색으로 구분합니다 */
+.save-message--error {
+  color: var(--color-alert);
+}
+
+/* ---------------------------------------------------------------------
+   로그인 / 회원가입 (AuthPanel)
+--------------------------------------------------------------------- */
+
+.app-header-title {
+  flex: 1;
+}
+
+.app-header-auth {
+  position: relative;
+}
+
+.auth-panel {
+  position: relative;
+}
+
+.auth-panel-toggle {
+  padding: 8px 16px;
+  background: var(--color-ink);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-panel-toggle:hover {
+  background: #0e2422;
+}
+
+.auth-panel-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 260px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 16px;
+  z-index: 20;
+}
+
+.auth-panel-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.auth-panel-tabs button {
+  flex: 1;
+  padding: 8px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-ink-soft);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-panel-tabs button.active {
+  color: var(--color-guard-green);
+  border-bottom-color: var(--color-guard-green);
+}
+
+.auth-panel-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.auth-panel-form input {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 0.88rem;
+  font-family: var(--font-body);
+  box-sizing: border-box;
+}
+
+.auth-panel-error {
+  font-size: 0.78rem;
+  color: var(--color-alert);
+  margin: 0;
+}
+
+.auth-panel--logged-in {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.auth-panel-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+}
+
+.auth-panel-user-label {
+  color: var(--color-ink);
+  font-weight: 600;
+}
+
+.auth-panel-link {
+  background: none;
+  border: none;
+  color: var(--color-ink-soft);
+  font-size: 0.82rem;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.auth-panel-link:hover {
+  color: var(--color-guard-green);
+}
+
+.auth-history-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 300px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 8px;
+  z-index: 20;
+}
+
+.auth-history-empty {
+  padding: 12px;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--color-ink-soft);
+  text-align: center;
+}
+
+.auth-history-dropdown ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.auth-history-item {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.auth-history-select {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.auth-history-select:hover {
+  background: #f2f5f4;
+}
+
+.auth-history-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.auth-history-date {
+  font-size: 0.72rem;
+  color: var(--color-ink-soft);
+}
+
+.auth-history-facts {
+  font-size: 0.78rem;
+  color: var(--color-ink-soft);
+  /* 폭이 좁아 값이 길면 잘리도록 - 클릭하면 어차피 전체 결과를 다 보여줍니다 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.auth-history-delete {
+  flex-shrink: 0;
+  width: 28px;
+  background: none;
+  border: none;
+  color: var(--color-ink-soft);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.auth-history-delete:hover {
+  background: #fbeceA;
+  color: var(--color-alert);
+}
+
+/* ---------------------------------------------------------------------
+   진단 저장 이름 입력 / 중복 확인
+--------------------------------------------------------------------- */
+
+.save-diagnosis-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: -8px 0 16px;
+}
+
+/* 이름 입력칸 + 저장/취소 버튼을 한 줄에, 버튼은 입력칸 오른쪽에 붙입니다 */
+.save-diagnosis-form-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.save-diagnosis-form input {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 0.88rem;
+  font-family: var(--font-body);
+  box-sizing: border-box;
+}
+
+.save-diagnosis-form-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* "저장"/"취소" 글자 길이가 달라서 자연 너비로 두면 크기가 서로 달라 보였습니다.
+   패딩도 btn-primary(12px)/btn-secondary(10px)가 서로 달라 높이까지 미묘하게 어긋났던 걸,
+   이 영역 안에서만 폭·높이를 통일해서 나란히 깔끔하게 줄맞춤되게 합니다. */
+.save-diagnosis-form-actions button {
+  min-width: 84px;
+  padding: 10px 0;
+  box-sizing: border-box;
+  white-space: nowrap;
+}
+
+.save-diagnosis-form-error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-alert);
+}
+
+.save-duplicate-confirm {
+  background: #fafbfa;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin: -8px 0 16px;
+  font-size: 0.85rem;
+}
+
+.save-duplicate-confirm p {
+  margin: 0 0 10px;
+  color: var(--color-ink);
+}
+
+.save-duplicate-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .auth-panel-dropdown,
+  .auth-history-dropdown {
+    right: 0;
+    left: auto;
   }
 }

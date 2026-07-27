@@ -260,6 +260,11 @@ class ReportExportRequestBody(DiagnosisRequestBody):
     format: str = Field(default="pdf", description="'pdf', 'text', 'image' 중 하나")
 
 
+class DiagnosisSaveRequestBody(DiagnosisRequestBody):
+    # 기본값을 안 두고 필수로 둡니다 - "내 진단 기록"에 저장할 때는 반드시 이름을 붙이게 합니다.
+    label: str
+
+
 class ChatRequestBody(BaseModel):
     message: Optional[str] = None
     query: Optional[str] = None
@@ -486,15 +491,23 @@ def api_scenario_comparison(body: DiagnosisRequestBody):
 
 @app.post("/api/diagnosis/save")
 def api_save_diagnosis(
-    body: DiagnosisRequestBody,
+    body: DiagnosisSaveRequestBody,
     current_user=Depends(get_current_user),
 ):
+    label = body.label.strip()
+    if not label:
+        raise HTTPException(status_code=400, detail="진단 기록 이름을 입력해 주세요.")
+
     result = _run(diagnose, body.to_dataclass())
     payload = _to_jsonable(result)
 
+    input_data = _model_dump(body)
+    input_data.pop("label", None)  # label은 doc 최상위 필드로 따로 저장하므로 input 안에는 중복시키지 않습니다.
+
     doc = {
         "user_id": current_user["_id"],
-        "input": _model_dump(body),
+        "label": label,
+        "input": input_data,
         "result": payload,
         "created_at": now_utc(),
     }
@@ -503,6 +516,7 @@ def api_save_diagnosis(
 
     return {
         "diagnosis_id": str(inserted.inserted_id),
+        "label": label,
         "result": jsonable_encoder(payload),
     }
 
@@ -533,6 +547,25 @@ def api_get_diagnosis(
         raise HTTPException(status_code=404, detail="진단 기록을 찾을 수 없습니다.")
 
     return serialize_doc(doc)
+
+
+@app.delete("/api/diagnoses/{diagnosis_id}")
+def api_delete_diagnosis(
+    diagnosis_id: str,
+    current_user=Depends(get_current_user),
+):
+    try:
+        oid = ObjectId(diagnosis_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="진단 기록 ID 형식이 올바르지 않습니다.")
+
+    # user_id도 같이 걸어서, 다른 사람 진단 기록의 ID를 알아내도 못 지우게 합니다.
+    result = diagnosis_records.delete_one({"_id": oid, "user_id": current_user["_id"]})
+
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="진단 기록을 찾을 수 없습니다.")
+
+    return {"deleted": True}
 
 
 # -----------------------------------------------------------------------------

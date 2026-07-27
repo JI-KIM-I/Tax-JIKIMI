@@ -24,6 +24,22 @@ export const initialForm = {
   max_pension_start_age: 85,
 };
 
+// 저장된 진단 기록(백엔드로 보냈던 payload 모양, annual_yield_rate가 0.04 형태)을
+// 폼이 쓰는 모양(annual_yield_rate_pct, 4)으로 되돌립니다. "내 진단 기록"에서 과거 진단을
+// 고르면 오른쪽 결과뿐 아니라 왼쪽 폼도 그때 입력했던 값 그대로 보여주기 위해 씁니다.
+// initialForm을 베이스로 깔고 겹쳐 써서, 예전에 저장된 기록에 없는 필드(스키마 추가 등)가 있어도
+// 안전하게 기본값으로 채워집니다.
+export function payloadToFormValues(payload) {
+  if (!payload) return initialForm;
+  const { annual_yield_rate, ...rest } = payload;
+  return {
+    ...initialForm,
+    ...rest,
+    annual_yield_rate_pct:
+      annual_yield_rate === undefined || annual_yield_rate === null ? initialForm.annual_yield_rate_pct : annual_yield_rate * 100,
+  };
+}
+
 // 숫자 입력칸을 클릭(포커스)하면 안에 있던 숫자가 전체 선택되도록 해서,
 // 바로 새 숫자를 타이핑하면 기존 값(예: 0)이 자동으로 지워지고 덮어써지게 합니다.
 const selectAllOnFocus = (e) => e.target.select();
@@ -34,21 +50,36 @@ const currentYear = new Date().getFullYear();
 const MAX_AGE = 120;
 const BIRTH_YEAR_OPTIONS = Array.from({ length: MAX_AGE + 1 }, (_, i) => currentYear - i);
 
-function Field({ label, hint, children }) {
+function Field({ label, hint, required, children }) {
   return (
     <label className="field">
-      <span className="field-label">{label}</span>
+      <span className="field-label">
+        {label}
+        {required && (
+          <span className="field-required" title="필수 입력">
+            {" "}*
+          </span>
+        )}
+      </span>
       {children}
       {hint && <span className="field-hint">{hint}</span>}
     </label>
   );
 }
 
+// 값이 없으면 진단 자체가 성립 안 되는 핵심 식별값만 필수로 둡니다. ISA·연금저축 납입액처럼
+// "안 쓰고 있으면 0"이 그 자체로 유효한 답인 금액 필드는 필수로 걸지 않습니다.
+const REQUIRED_FIELDS = [
+  { name: "age", label: "현재 나이" },
+  { name: "retirement_age", label: "개인연금·IRP 수령 예정 나이" },
+  { name: "total_income", label: "연간 총급여·종합소득" },
+];
+
 // 천단위 쉼표를 보여주려고 type="text"를 씁니다 (type="number"는 쉼표를 입력할 수 없어요 —
 // 그 대신 위/아래 스피너 화살표는 없어집니다). "원" 단위는 입력값 안에 같이 넣지 않고,
 // 입력칸 오른쪽에 회색 글자로 따로 얹어서 보여줍니다 (편집할 때 방해되지 않게).
 // 나이처럼 "원" 단위가 안 맞는 필드는 unit="" 으로 꺼둘 수 있습니다.
-function NumberField({ label, hint, name, value, onChange, unit = "원" }) {
+function NumberField({ label, hint, name, value, onChange, unit = "원", required }) {
   const displayValue =
     value === "" || value === null || value === undefined ? "" : Number(value).toLocaleString("ko-KR");
 
@@ -58,7 +89,7 @@ function NumberField({ label, hint, name, value, onChange, unit = "원" }) {
   };
 
   return (
-    <Field label={label} hint={hint}>
+    <Field label={label} hint={hint} required={required}>
       <div className="field-number-wrap">
         <input
           type="text"
@@ -98,8 +129,11 @@ function validateDiagnosisForm(normalized) {
   return null;
 }
 
-export default function DiagnosisForm({ onSubmit, loading }) {
-  const [form, setForm] = useState(initialForm);
+export default function DiagnosisForm({ onSubmit, loading, initialValues }) {
+  // initialValues는 최초 렌더링(마운트) 시점에만 읽힙니다. 이후에 바뀐 값을 반영하려면
+  // 호출하는 쪽(App.jsx)에서 key를 바꿔 컴포넌트를 다시 마운트시켜야 합니다
+  // ("내 진단 기록"에서 과거 진단을 고를 때 이 방식을 씁니다).
+  const [form, setForm] = useState(initialValues || initialForm);
   // 백엔드까지 안 보내도 미리 알 수 있는 입력 오류(나이 관계 등)는 여기서 바로 잡아서
   // "retirement_age must be..." 같은 원본 에러 메시지가 아예 뜰 일이 없게 합니다.
   const [validationError, setValidationError] = useState(null);
@@ -118,6 +152,16 @@ export default function DiagnosisForm({ onSubmit, loading }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    // 필수 항목은 정규화(빈칸 -> 0)로 넘어가기 전에 원본 form 값으로 먼저 확인합니다.
+    // 여기서 걸러지지 않으면 "0원"으로 조용히 진단이 진행돼서, 사용자가 실수로 빈칸을 낸 걸
+    // 못 알아차리게 됩니다.
+    const missingFields = REQUIRED_FIELDS.filter(({ name }) => form[name] === "").map(({ label }) => label);
+    if (missingFields.length > 0) {
+      setValidationError(`다음 항목을 입력해주세요: ${missingFields.join(", ")}`);
+      return;
+    }
+
     const { annual_yield_rate_pct, ...rest } = form;
     // 입력칸이 비어있는 채로 제출하면(값 "") 0으로 간주합니다.
     const normalized = Object.fromEntries(
@@ -153,6 +197,7 @@ export default function DiagnosisForm({ onSubmit, loading }) {
           unit="세"
           value={form.age}
           onChange={handleChange}
+          required
         />
         <Field label="출생연도" hint="국민연금을 몇 살부터 받을 수 있는지 계산하는 데 써요">
           <select name="birth_year" autoComplete="off" value={form.birth_year} onChange={handleChange}>
@@ -170,6 +215,7 @@ export default function DiagnosisForm({ onSubmit, loading }) {
           unit="세"
           value={form.retirement_age}
           onChange={handleChange}
+          required
         />
         <NumberField
           label="연간 총급여·종합소득 (1년 동안 버는 돈 전체, 세전 기준)"
@@ -177,6 +223,7 @@ export default function DiagnosisForm({ onSubmit, loading }) {
           min="0"
           value={form.total_income}
           onChange={handleChange}
+          required
         />
       </fieldset>
 

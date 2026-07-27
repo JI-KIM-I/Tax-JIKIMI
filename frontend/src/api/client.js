@@ -52,4 +52,78 @@ export async function sendChatMessage(message, context = null, topK = 4) {
   return response.data;
 }
 
+// ---------------------------------------------------------------------------
+// 회원가입 · 로그인 · 진단 저장/불러오기
+// 로그인 필요한 API는 매번 명시적으로 { Authorization: `Bearer ${token}` }를
+// 넘겨받는 방식으로 구현합니다 (인터셉터로 숨기지 않고, 호출하는 쪽에서
+// 토큰이 있는지 없는지 항상 눈에 보이게 하기 위함).
+// ---------------------------------------------------------------------------
+
+function authHeader(token) {
+  return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+}
+
+/**
+ * 회원가입.
+ * @param {{email: string, password: string, name?: string, nickname?: string}} payload
+ * @returns {Promise<{access_token: string, token_type: string, user: object}>}
+ */
+export async function signup(payload) {
+  const response = await client.post("/api/auth/signup", payload);
+  return response.data;
+}
+
+/**
+ * 로그인.
+ * @param {{email: string, password: string}} payload
+ * @returns {Promise<{access_token: string, token_type: string, user: object}>}
+ */
+export async function login(payload) {
+  const response = await client.post("/api/auth/login", payload);
+  return response.data;
+}
+
+/**
+ * 로그인된 사용자로 현재 진단 결과를 DB에 저장.
+ * @param {object} payload - DiagnosisRequestBody 모양의 입력값 + { label: string } (이름 필수)
+ * @param {string} token - 로그인 시 받은 access_token
+ * @returns {Promise<{diagnosis_id: string, label: string, result: object}>}
+ */
+export async function saveDiagnosis(payload, token) {
+  const response = await client.post("/api/diagnosis/save", payload, authHeader(token));
+  return response.data;
+}
+
+/**
+ * 저장된 진단 기록 삭제.
+ * @param {string} diagnosisId
+ * @param {string} token
+ * @returns {Promise<{deleted: boolean}>}
+ */
+export async function deleteDiagnosis(diagnosisId, token) {
+  const response = await client.delete(`/api/diagnoses/${diagnosisId}`, authHeader(token));
+  return response.data;
+}
+
+/**
+ * 로그인된 사용자의 저장된 진단 기록 목록 (최신순 최대 20건).
+ * @param {string} token
+ * @returns {Promise<Array<object>>}
+ */
+export async function listDiagnoses(token) {
+  const response = await client.get("/api/diagnoses", authHeader(token));
+  return response.data;
+}
+
+/**
+ * 저장된 진단 기록 1건 상세 조회.
+ * @param {string} diagnosisId
+ * @param {string} token
+ * @returns {Promise<object>}
+ */
+export async function getDiagnosis(diagnosisId, token) {
+  const response = await client.get(`/api/diagnoses/${diagnosisId}`, authHeader(token));
+  return response.data;
+}
+
 export default client;
