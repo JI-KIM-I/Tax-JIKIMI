@@ -96,6 +96,16 @@ export default function AuthPanel({ auth, onAuthSuccess, onLogout, onSelectDiagn
         const list = await listDiagnoses(auth.token);
         setDiagnoses(list);
       } catch (err) {
+        if (err.response?.status === 401) {
+          // 토큰이 만료/무효화된 상태로 남아있던 경우 - 에러 문구만 보여주면 로그인된
+          // 것처럼 보이는 화면이 계속 남아 헷갈리므로, 바로 로그아웃 처리하고 로그인
+          // 패널을 열어 안내 문구를 보여줍니다(닫혀있으면 setError만으론 안 보임).
+          handleLogout();
+          setMode("login");
+          setOpen(true);
+          setError("로그인이 만료되었습니다. 다시 로그인해 주세요.");
+          return;
+        }
         setHistoryError(authErrorMessage(err));
       } finally {
         setHistoryLoading(false);

@@ -16,7 +16,7 @@ security = HTTPBearer(auto_error=False)
 
 JWT_SECRET = os.getenv("JWT_SECRET", "dev-secret-change-me")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
-ACCESS_TOKEN_EXPIRE_HOURS = 24
+ACCESS_TOKEN_EXPIRE_HOURS = 24 * 7  # 24시간은 너무 짧아서 하루 지나면 다시 로그인해야 했음 -> 7일로 연장
 
 
 def hash_password(password: str) -> str:
