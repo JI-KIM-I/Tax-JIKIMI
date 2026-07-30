@@ -8,9 +8,10 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 const client = axios.create({
   baseURL: BASE_URL,
   // Render 무료 요금제는 일정 시간 요청이 없으면 서버가 잠들었다가, 첫 요청이 오면 그때 다시
-  // 깨어나는 데 수십 초가 걸릴 수 있습니다. 10초로는 그 콜드스타트를 못 견디고 타임아웃 에러가 나서
-  // "계산 중 오류가 발생했습니다" 같은 문구만 뜨고 진짜 원인이 안 보였던 사례가 있어 30초로 늘렸습니다.
-  timeout: 30000,
+  // 깨어나는 데 수십 초가 걸릴 수 있습니다. Render 자체 안내에도 "50초 이상 지연될 수 있다"고
+  // 나와 있는데, 10초→30초로 늘렸을 때도 실제로 "timeout of 30000ms exceeded"가 발생해서
+  // 콜드스타트를 다 못 견뎠던 사례가 있어 60초로 다시 늘렸습니다.
+  timeout: 60000,
 });
 
 /**
@@ -43,11 +44,12 @@ export async function exportReport(payload) {
  * @returns {Promise<{answer: string, sources: Array<{source: string, text: string}>}>}
  */
 export async function sendChatMessage(message, context = null, topK = 4) {
-  // LLM 응답은 계산 API보다 오래 걸릴 수 있어 타임아웃을 늘려서 별도 호출합니다.
+  // LLM 응답은 계산 API보다 오래 걸릴 수 있고, 콜드스타트 직후라면 그 위에 더해질 수 있어
+  // 기본 client보다 더 넉넉하게 둡니다.
   const response = await client.post(
     "/api/chat",
     { message, context, top_k: topK },
-    { timeout: 30000 }
+    { timeout: 60000 }
   );
   return response.data;
 }
