@@ -52,6 +52,20 @@ NATIONAL_PENSION_START_AGE_BY_BIRTH_YEAR: tuple[tuple[int, int, int], ...] = (
 # 이 앱의 대상 페르소나(은퇴 후 국민연금+사적연금+ISA를 굴리는 일반인)에는 해당하지 않는 경우가
 # 대부분이라 전용 계산 필드는 두지 않고, 관련 질문은 챗봇이 일반 지식으로 안내합니다.
 
+# 사적연금(연금저축·IRP) 연간 합산 수령액이 이 금액을 초과하면 종합과세 대상이 됩니다.
+# (소득세법 제20조의3, 2023년 세법개정으로 기준금액이 1,200만 원에서 1,500만 원으로 상향)
+# 이 경우 다른 종합소득과 합산해 누진세율을 적용하거나, 16.5%(국세 15%+지방세 10%)
+# 분리과세를 선택할 수 있습니다. 본 로직은 MVP 단순화를 위해 "선택 가능한 분리과세율"을
+# 하한으로 반영하여, 원천징수 나이 구간 세율(3~5%)만으로 과소 추정되지 않도록 합니다.
+PRIVATE_PENSION_COMPREHENSIVE_THRESHOLD = 15_000_000
+PRIVATE_PENSION_SEPARATE_TAX_RATE = D("0.15")
+
+# 연금 수령 시점 추천(NPV 비교)에 사용하는 기본 할인율.
+# 사적연금 원천징수세율은 나이가 많을수록 단조 감소(5%→4%→3%)하기 때문에, 세금만 비교하면
+# 항상 최대 나이가 추천되는 구조적 왜곡이 생깁니다. 수령을 미루는 동안 돈을 늦게 받는
+# 기회비용을 이 할인율로 반영해 이 왜곡을 바로잡습니다.
+PENSION_START_DEFAULT_DISCOUNT_RATE = D("0.03")
+
 
 @dataclass(frozen=True)
 class TaxBand:
@@ -118,6 +132,8 @@ class PensionStartRecommendationRequest:
     split_years: int = 10
     lifetime_annuity_contract: bool = False
     tax_year: int = 2026
+    # 수령 지연에 따른 화폐의 시간가치(기회비용)를 반영하는 연간 할인율.
+    discount_rate: Decimal = PENSION_START_DEFAULT_DISCOUNT_RATE
 
 
 @dataclass(frozen=True)
@@ -159,6 +175,7 @@ class DiagnosisRequest:
 
     recommend_pension_start: bool = True
     max_pension_start_age: int = 85
+    pension_start_discount_rate: Decimal = PENSION_START_DEFAULT_DISCOUNT_RATE
 
     # 국민연금 수급개시연령은 age/retirement_age(사적연금 수령 시점)와는 별개로 출생연도로 고정되어
     # 계산됩니다. birth_year를 안 주면 tax_year - age로 추정합니다.
@@ -201,6 +218,8 @@ class AnnualPensionTaxResponse:
     local_tax: int
     total_tax: int
     cumulative_tax: int
+    # 해당 연도 수령액이 사적연금 종합과세 판단 기준(연 1,500만 원)을 초과하는지 여부
+    exceeds_comprehensive_threshold: bool = False
 
 
 @dataclass(frozen=True)
@@ -220,6 +239,8 @@ class PensionCompareResponse:
     saving_by_split: int
     annual_taxes: list[AnnualPensionTaxResponse]
     message: str
+    # 분할 수령 기간 중 한 해라도 종합과세 판단 기준(연 1,500만 원)을 초과하는지 여부
+    any_year_exceeds_threshold: bool = False
 
 
 @dataclass(frozen=True)
@@ -227,6 +248,8 @@ class PensionStartRecommendationResponse:
     recommended_start_age: int
     expected_split_total_tax: int
     reason: str
+    # 추천 시작 나이 기준, 할인율을 반영한 세후 수령액의 현재가치(NPV)
+    expected_npv_after_tax_income: int = 0
 
 
 @dataclass(frozen=True)
@@ -468,6 +491,11 @@ def get_private_pension_national_rate(
     - 2025년 이전 수령분: 4%
 
     지방소득세 10%는 이 함수가 아니라 세금 계산 단계에서 별도로 더합니다.
+
+    주의: 이 세율은 "원천징수" 단계의 세율입니다. 연간 사적연금 수령액이
+    PRIVATE_PENSION_COMPREHENSIVE_THRESHOLD(1,500만 원)를 초과하면 종합과세
+    대상이 되어 실제 부담 세율이 이 표보다 높아질 수 있습니다. 해당 판단은
+    compare_pension_withdrawal에서 별도로 반영합니다.
     """
     _validate_non_negative(age, "age")
 
@@ -487,8 +515,18 @@ def get_private_pension_national_rate(
 
 def get_private_pension_rate_note(tax_year: int = 2026) -> str:
     if tax_year >= 2026:
-        return "국세청 기준: 일반 사적연금 70세 미만 5%, 70~79세 4%, 80세 이상 3%. 종신계약 연금은 2026.1.1 이후 3% 적용."
-    return "국세청 종전 기준: 일반 사적연금 70세 미만 5%, 70~79세 4%, 80세 이상 3%. 종신계약 연금은 2025년 이전 4% 적용."
+        return (
+            "국세청 기준: 일반 사적연금 70세 미만 5%, 70~79세 4%, 80세 이상 3%. "
+            "종신계약 연금은 2026.1.1 이후 3% 적용. "
+            "단, 연간 사적연금 수령액이 1,500만 원을 초과하면 종합과세 대상이 되며, "
+            "16.5%(국세 15%+지방세 10%) 분리과세를 선택할 수 있습니다."
+        )
+    return (
+        "국세청 종전 기준: 일반 사적연금 70세 미만 5%, 70~79세 4%, 80세 이상 3%. "
+        "종신계약 연금은 2025년 이전 4% 적용. "
+        "단, 연간 사적연금 수령액이 1,500만 원을 초과하면 종합과세 대상이 되며, "
+        "16.5%(국세 15%+지방세 10%) 분리과세를 선택할 수 있습니다."
+    )
 
 
 def compare_pension_withdrawal(request: PensionCompareRequest) -> PensionCompareResponse:
@@ -509,6 +547,8 @@ def compare_pension_withdrawal(request: PensionCompareRequest) -> PensionCompare
     lump_total_tax = lump_national_tax + lump_local_tax
 
     # 분할 연금수령: 매년 수령 나이에 따른 사적연금 세율 적용 + 지방소득세 10%
+    # 단, 해당 연도 수령액이 종합과세 판단 기준(1,500만 원)을 초과하면 원천징수 나이 구간
+    # 세율 대신 선택 가능한 분리과세율(15%)을 하한으로 적용해 세부담을 과소 추정하지 않습니다.
     annual_base = pension_amount // split_years
     remainder = pension_amount % split_years
 
@@ -516,11 +556,18 @@ def compare_pension_withdrawal(request: PensionCompareRequest) -> PensionCompare
     split_national_tax = 0
     split_local_tax = 0
     cumulative_tax = 0
+    any_year_exceeds_threshold = False
 
     for i in range(split_years):
         age = start_age + i
         annual_amount = annual_base + (remainder if i == split_years - 1 else 0)
-        rate = get_private_pension_national_rate(age, lifetime_annuity_contract, tax_year)
+
+        exceeds_threshold = annual_amount > PRIVATE_PENSION_COMPREHENSIVE_THRESHOLD
+        age_rate = get_private_pension_national_rate(age, lifetime_annuity_contract, tax_year)
+        rate = max(age_rate, PRIVATE_PENSION_SEPARATE_TAX_RATE) if exceeds_threshold else age_rate
+        if exceeds_threshold:
+            any_year_exceeds_threshold = True
+
         national_tax = _money_mul(annual_amount, rate)
         local_tax = _money_mul(national_tax, LOCAL_INCOME_TAX_RATE)
         total_tax = national_tax + local_tax
@@ -536,6 +583,7 @@ def compare_pension_withdrawal(request: PensionCompareRequest) -> PensionCompare
                 local_tax=local_tax,
                 total_tax=total_tax,
                 cumulative_tax=cumulative_tax,
+                exceeds_comprehensive_threshold=exceeds_threshold,
             )
         )
 
@@ -544,6 +592,16 @@ def compare_pension_withdrawal(request: PensionCompareRequest) -> PensionCompare
 
     split_total_tax = split_national_tax + split_local_tax
     saving_by_split = lump_total_tax - split_total_tax
+
+    message = (
+        f"{start_age}세부터 {pension_amount:,}원을 {split_years}년간 나누어 받으면 "
+        f"일시금 대비 약 {saving_by_split:,}원의 세금 차이가 발생합니다."
+    )
+    if any_year_exceeds_threshold:
+        message += (
+            " 단, 연간 수령액이 1,500만 원을 초과하는 해에는 종합과세 대상이 되어 "
+            "16.5% 분리과세(또는 다른 소득 합산 누진세율) 기준으로 세금을 다시 계산했습니다."
+        )
 
     return PensionCompareResponse(
         start_age=start_age,
@@ -560,10 +618,8 @@ def compare_pension_withdrawal(request: PensionCompareRequest) -> PensionCompare
         split_total_tax=split_total_tax,
         saving_by_split=saving_by_split,
         annual_taxes=annual_taxes,
-        message=(
-            f"{start_age}세부터 {pension_amount:,}원을 {split_years}년간 나누어 받으면 "
-            f"일시금 대비 약 {saving_by_split:,}원의 세금 차이가 발생합니다."
-        ),
+        message=message,
+        any_year_exceeds_threshold=any_year_exceeds_threshold,
     )
 
 
@@ -609,7 +665,20 @@ def build_national_pension_start_age_info(birth_year: int) -> PublicPensionStart
 # -----------------------------------------------------------------------------
 
 def recommend_pension_start_age(request: PensionStartRecommendationRequest) -> PensionStartRecommendationResponse:
-    """시작 나이별 분할 수령 세금을 비교하여 가장 세금이 낮은 시작 나이를 추천."""
+    """시작 나이별 세후 수령액의 현재가치(NPV)를 비교해 가장 유리한 시작 나이를 추천.
+
+    이전 로직의 구조적 문제:
+    사적연금 원천징수세율은 나이가 많을수록 단조 감소(5%→4%→3%)하기 때문에,
+    "총 세금이 가장 적은 나이"만 비교하면 항상 max_start_age(입력 가능한 최대 나이)가
+    선택되는 왜곡이 발생했습니다. 이는 수령을 늦추는 동안 돈을 받지 못하는 기회비용을
+    전혀 반영하지 않았기 때문입니다.
+
+    개선된 로직:
+    각 시작 나이 후보에 대해 "세후 수령액"을 계산한 뒤, discount_rate(연간 할인율)로
+    현재 시점(current_age) 기준 현재가치(NPV)로 환산해 비교합니다. 수령을 늦출수록
+    세금은 줄어들지만 현금 흐름 자체가 뒤로 밀려 NPV가 할인되므로, 세금 절감 효과와
+    지연에 따른 기회비용이 함께 반영된 균형 잡힌 추천이 가능합니다.
+    """
     _validate_non_negative(request.current_age, "current_age")
     _validate_non_negative(request.max_start_age, "max_start_age")
     _validate_non_negative(request.pension_amount, "pension_amount")
@@ -618,35 +687,68 @@ def recommend_pension_start_age(request: PensionStartRecommendationRequest) -> P
     if request.current_age > request.max_start_age:
         raise ValueError("current_age must be <= max_start_age")
 
-    best: PensionCompareResponse | None = None
+    discount_rate = D(str(request.discount_rate))
+    if discount_rate < 0:
+        raise ValueError("discount_rate must be non-negative")
 
-    for age in range(request.current_age, request.max_start_age + 1):
+    best_result: PensionCompareResponse | None = None
+    best_npv: Decimal | None = None
+    best_deferral_years = 0
+
+    for start_age in range(request.current_age, request.max_start_age + 1):
         result = compare_pension_withdrawal(
             PensionCompareRequest(
-                start_age=age,
+                start_age=start_age,
                 pension_amount=request.pension_amount,
                 split_years=request.split_years,
                 lifetime_annuity_contract=request.lifetime_annuity_contract,
                 tax_year=request.tax_year,
             )
         )
-        if best is None or result.split_total_tax < best.split_total_tax:
-            best = result
 
-    assert best is not None
+        deferral_years = start_age - request.current_age
+        npv = D("0")
+        for i, annual_tax in enumerate(result.annual_taxes):
+            years_from_now = deferral_years + i
+            net_amount = annual_tax.annual_amount - annual_tax.total_tax
+            discount_factor = (D("1") + discount_rate) ** years_from_now
+            npv += D(net_amount) / discount_factor
+
+        if best_npv is None or npv > best_npv:
+            best_npv = npv
+            best_result = result
+            best_deferral_years = deferral_years
+
+    assert best_result is not None and best_npv is not None
+
+    npv_rounded = int(best_npv.quantize(D("1"), rounding=ROUND_HALF_UP))
+
+    if best_deferral_years == 0:
+        timing_note = (
+            "세금 절감 효과보다 수령 지연에 따른 기회비용이 더 커서, "
+            "가능한 가장 이른 나이부터 수령을 시작하는 편이 유리합니다."
+        )
+    else:
+        timing_note = (
+            f"{best_deferral_years}년을 미뤄 {best_result.start_age}세부터 수령을 시작하면, "
+            "나이 구간별 세율 하락에 따른 절세 효과가 지연에 따른 기회비용보다 커서 유리합니다."
+        )
 
     reason = (
-        f"[개인연금·IRP 등 사적연금 기준] 단순 세율 기준으로 {request.pension_amount:,}원을 "
-        f"{request.split_years}년간 나누어 받을 때, {best.start_age}세 시작이 예상 세금 "
-        f"{best.split_total_tax:,}원으로 가장 낮습니다. 단, 실제 의사결정에는 필요한 생활비와 "
-        "투자수익률을 함께 봐야 합니다. 국민연금·공무원연금은 이 계산과 무관하게 출생연도/퇴직연도로 "
+        f"[개인연금·IRP 등 사적연금 기준] 연 할인율 {_percent_text(discount_rate)}%를 가정하고 "
+        f"{request.pension_amount:,}원을 {request.split_years}년간 나누어 받을 때, "
+        f"{best_result.start_age}세부터 시작하는 경우의 세후 수령액 현재가치(NPV)가 약 "
+        f"{npv_rounded:,}원으로 가장 큽니다. {timing_note} 이 추천은 세금과 화폐의 시간가치만 "
+        "반영한 것으로, 실제 의사결정에는 필요한 생활비, 건강 상태, 다른 소득과의 종합과세 여부를 "
+        "함께 고려해야 합니다. 국민연금·공무원연금은 이 계산과 무관하게 출생연도/퇴직연도로 "
         "수급개시연령이 고정되어 있어 이 추천이 적용되지 않습니다."
     )
 
     return PensionStartRecommendationResponse(
-        recommended_start_age=best.start_age,
-        expected_split_total_tax=best.split_total_tax,
+        recommended_start_age=best_result.start_age,
+        expected_split_total_tax=best_result.split_total_tax,
         reason=reason,
+        expected_npv_after_tax_income=npv_rounded,
     )
 
 
@@ -839,6 +941,7 @@ def diagnose(request: DiagnosisRequest) -> DiagnosisResponse:
                 split_years=request.pension_split_years,
                 lifetime_annuity_contract=request.lifetime_annuity_contract,
                 tax_year=request.tax_year,
+                discount_rate=request.pension_start_discount_rate,
             )
         )
 
